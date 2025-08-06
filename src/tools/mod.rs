@@ -133,17 +133,36 @@ impl ToolRegistry {
     }
 
     fn register_stack_analysis_tools(&mut self) {
-        // TODO: Register actual tools when implemented
+        self.register_tool(Box::new(stack_analysis::GetBacktraceTool));
+        self.register_tool(Box::new(stack_analysis::SelectFrameTool));
+        self.register_tool(Box::new(stack_analysis::GetFrameInfoTool));
+        self.register_tool(Box::new(stack_analysis::GetFrameVariablesTool));
+        self.register_tool(Box::new(stack_analysis::GetFrameArgumentsTool));
+        self.register_tool(Box::new(stack_analysis::EvaluateInFrameTool));
+        // Keep placeholder for backward compatibility
         self.register_tool(Box::new(stack_analysis::PlaceholderTool));
     }
 
     fn register_memory_inspection_tools(&mut self) {
-        // TODO: Register actual tools when implemented  
+        self.register_tool(Box::new(memory_inspection::ReadMemoryTool));
+        self.register_tool(Box::new(memory_inspection::WriteMemoryTool));
+        self.register_tool(Box::new(memory_inspection::DisassembleTool));
+        self.register_tool(Box::new(memory_inspection::SearchMemoryTool));
+        self.register_tool(Box::new(memory_inspection::GetMemoryRegionsTool));
+        self.register_tool(Box::new(memory_inspection::DumpMemoryTool));
+        self.register_tool(Box::new(memory_inspection::MemoryMapTool));
+        // Keep placeholder for backward compatibility
         self.register_tool(Box::new(memory_inspection::PlaceholderTool));
     }
 
     fn register_variable_tools(&mut self) {
-        // TODO: Register actual tools when implemented
+        self.register_tool(Box::new(variables::GetVariablesTool));
+        self.register_tool(Box::new(variables::GetGlobalVariablesTool));
+        self.register_tool(Box::new(variables::EvaluateExpressionTool));
+        self.register_tool(Box::new(variables::GetVariableInfoTool));
+        self.register_tool(Box::new(variables::SetVariableTool));
+        self.register_tool(Box::new(variables::LookupSymbolTool));
+        // Keep placeholder for backward compatibility
         self.register_tool(Box::new(variables::PlaceholderTool));
     }
 

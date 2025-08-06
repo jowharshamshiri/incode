@@ -261,10 +261,31 @@ impl Tool for ListProcessesTool {
 
     async fn execute(
         &self,
-        _arguments: HashMap<String, Value>,
-        _lldb_manager: &mut LldbManager,
+        arguments: HashMap<String, Value>,
+        lldb_manager: &mut LldbManager,
     ) -> IncodeResult<ToolResponse> {
-        // TODO: Implement process listing
-        Ok(ToolResponse::Error("Not yet implemented".to_string()))
+        let filter = arguments.get("filter")
+            .and_then(|v| v.as_str());
+
+        let include_system = arguments.get("include_system")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        match lldb_manager.list_processes(filter, include_system) {
+            Ok(processes) => {
+                let process_data: Vec<Value> = processes.into_iter().map(|p| json!({
+                    "pid": p.pid,
+                    "state": p.state,
+                    "executable_path": p.executable_path,
+                    "memory_usage": p.memory_usage
+                })).collect();
+
+                Ok(ToolResponse::Json(json!({
+                    "processes": process_data,
+                    "count": process_data.len()
+                })))
+            }
+            Err(e) => Ok(ToolResponse::Error(e.to_string())),
+        }
     }
 }
