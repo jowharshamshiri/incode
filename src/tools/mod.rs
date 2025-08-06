@@ -17,6 +17,7 @@ pub mod register_inspection;
 pub mod registers;
 pub mod debug_information;
 pub mod debug_info;
+pub mod target_information;
 pub mod target_info;
 pub mod lldb_control;
 pub mod session_management;
@@ -198,7 +199,9 @@ impl ToolRegistry {
     }
 
     fn register_target_info_tools(&mut self) {
-        // TODO: Register actual tools when implemented
+        self.register_tool(Box::new(target_info::GetTargetInfoTool));
+        self.register_tool(Box::new(target_info::GetPlatformInfoTool));
+        self.register_tool(Box::new(target_info::ListModulesTool));
         self.register_tool(Box::new(target_info::PlaceholderTool));
     }
 

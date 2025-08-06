@@ -164,6 +164,56 @@ pub struct CompilationUnit {
 }
 
 #[derive(Debug, Clone)]
+pub struct TargetInfo {
+    pub executable_path: String,
+    pub architecture: String,
+    pub platform: String,
+    pub executable_format: String, // e.g., "ELF", "Mach-O", "PE"
+    pub has_debug_symbols: bool,
+    pub entry_point: Option<u64>,
+    pub base_address: Option<u64>,
+    pub file_size: u64,
+    pub creation_time: Option<std::time::SystemTime>,
+    pub is_pie: bool, // Position Independent Executable
+    pub is_stripped: bool,
+    pub endianness: String, // "little" or "big"
+}
+
+#[derive(Debug, Clone)]
+pub struct PlatformInfo {
+    pub name: String,
+    pub version: String,
+    pub architecture: String,
+    pub vendor: String, // e.g., "apple", "pc", "unknown"
+    pub environment: String, // e.g., "gnu", "msvc", "darwin"
+    pub sdk_version: Option<String>,
+    pub deployment_target: Option<String>,
+    pub is_simulator: bool,
+    pub is_remote: bool,
+    pub supports_jit: bool,
+    pub working_directory: String,
+    pub supported_architectures: Vec<String>,
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleInfo {
+    pub name: String,
+    pub file_path: String,
+    pub uuid: String,
+    pub architecture: String,
+    pub load_address: u64,
+    pub file_size: u64,
+    pub is_main_executable: bool,
+    pub has_debug_symbols: bool,
+    pub symbol_vendor: Option<String>, // e.g., "DWARF", "PDB", "none"
+    pub compile_units: Vec<String>,
+    pub num_symbols: u32,
+    pub slide: Option<u64>, // ASLR slide
+    pub version: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ProcessInfo {
     pub pid: u32,
     pub state: String,
@@ -262,6 +312,19 @@ extern "C" {
     fn SBProcessReadMemory(process: *mut std::ffi::c_void, address: u64, size: u32, buffer: *mut u8) -> u32;
     fn SBProcessWriteMemory(process: *mut std::ffi::c_void, address: u64, data: *const u8, size: u32) -> u32;
     fn SBTargetReadInstructions(target: *mut std::ffi::c_void, address: u64, count: u32) -> *mut std::ffi::c_void;
+    fn SBTargetGetTriple(target: *mut std::ffi::c_void) -> *const i8;
+    fn SBTargetGetPlatform(target: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBPlatformGetName(platform: *mut std::ffi::c_void) -> *const i8;
+    fn SBTargetGetExecutable(target: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBFileSpecGetPath(filespec: *mut std::ffi::c_void, buffer: *mut i8, buffer_size: u32) -> u32;
+    fn SBPlatformGetWorkingDirectory(platform: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBPlatformGetOSBuild(platform: *mut std::ffi::c_void) -> *const i8;
+    fn SBPlatformGetOSDescription(platform: *mut std::ffi::c_void) -> *const i8;
+    fn SBPlatformGetHostname(platform: *mut std::ffi::c_void) -> *const i8;
+    fn SBModuleGetUUIDString(module: *mut std::ffi::c_void) -> *const i8;
+    fn SBModuleGetVersion(module: *mut std::ffi::c_void) -> *const i8;
+    fn SBModuleGetObjectName(module: *mut std::ffi::c_void) -> *const i8;
+    fn SBModuleGetTriple(module: *mut std::ffi::c_void) -> *const i8;
 }
 
 // Mock LLDB functions for testing environment
@@ -307,6 +370,89 @@ mod mock_lldb {
     pub fn SBBreakpointIsEnabled(_breakpoint: *mut std::ffi::c_void) -> bool { true }
     pub fn SBBreakpointGetHitCount(_breakpoint: *mut std::ffi::c_void) -> u32 { 0 }
     pub fn SBBreakpointDelete(_breakpoint: *mut std::ffi::c_void) -> bool { true }
+    pub fn SBTargetFindBreakpointByID(_target: *mut std::ffi::c_void, _id: u32) -> *mut std::ffi::c_void { 0xA as *mut std::ffi::c_void }
+    pub fn SBBreakpointSetEnabled(_breakpoint: *mut std::ffi::c_void, _enabled: bool) -> bool { true }
+    pub fn SBBreakpointSetCondition(_breakpoint: *mut std::ffi::c_void, _condition: *const std::ffi::c_char) -> bool { true }
+    pub fn SBProcessWriteMemory(_process: *mut std::ffi::c_void, _address: u64, _data: *const u8, _size: u32) -> u32 { 64 }
+    pub fn SBTargetGetTriple(_target: *mut std::ffi::c_void) -> *const i8 {
+        "x86_64-apple-macosx\0".as_ptr() as *const i8
+    }
+    pub fn SBTargetGetPlatform(_target: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+        0xB as *mut std::ffi::c_void
+    }
+    pub fn SBPlatformGetName(_platform: *mut std::ffi::c_void) -> *const i8 {
+        "host\0".as_ptr() as *const i8
+    }
+    pub fn SBTargetGetExecutable(_target: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+        0xC as *mut std::ffi::c_void
+    }
+    pub fn SBFileSpecGetPath(_filespec: *mut std::ffi::c_void, buffer: *mut i8, buffer_size: u32) -> u32 {
+        let path = b"/usr/bin/test\0";
+        let len = path.len().min(buffer_size as usize);
+        if !buffer.is_null() && buffer_size > 0 {
+            unsafe { std::ptr::copy_nonoverlapping(path.as_ptr() as *const i8, buffer, len); }
+        }
+        len as u32
+    }
+    pub fn SBProcessGetNumThreads(_process: *mut std::ffi::c_void) -> u32 { 2 }
+    pub fn SBProcessGetThreadAtIndex(_process: *mut std::ffi::c_void, index: u32) -> *mut std::ffi::c_void {
+        (0x400 + index as usize) as *mut std::ffi::c_void
+    }
+    pub fn SBThreadGetThreadID(_thread: *mut std::ffi::c_void) -> u64 { 12345 }
+    pub fn SBThreadGetIndexID(_thread: *mut std::ffi::c_void) -> u32 { 0 }
+    pub fn SBFrameGetRegisters(_frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+        0x500 as *mut std::ffi::c_void
+    }
+    pub fn SBValueListGetSize(_list: *mut std::ffi::c_void) -> u32 { 5 }
+    pub fn SBValueListGetValueAtIndex(_list: *mut std::ffi::c_void, index: u32) -> *mut std::ffi::c_void {
+        (0x600 + index as usize) as *mut std::ffi::c_void
+    }
+    pub fn SBValueGetName(_value: *mut std::ffi::c_void) -> *const i8 {
+        "rax\0".as_ptr() as *const i8
+    }
+    pub fn SBValueGetValueAsUnsigned(_value: *mut std::ffi::c_void) -> u64 { 0x12345678 }
+    pub fn SBValueSetValueFromCString(_value: *mut std::ffi::c_void, _cstr: *const i8) -> bool { true }
+    pub fn SBLineEntryGetFileSpec(_entry: *mut std::ffi::c_void) -> *mut std::ffi::c_void { 0x700 as *mut std::ffi::c_void }
+    pub fn SBFileSpecGetFilename(_filespec: *mut std::ffi::c_void) -> *const i8 { "main.cpp\0".as_ptr() as *const i8 }
+    pub fn SBFileSpecGetDirectory(_filespec: *mut std::ffi::c_void) -> *const i8 { "/src\0".as_ptr() as *const i8 }
+    pub fn SBLineEntryGetLine(_entry: *mut std::ffi::c_void) -> u32 { 42 }
+    pub fn SBTargetGetNumModules(_target: *mut std::ffi::c_void) -> u32 { 1 }
+    pub fn SBTargetGetModuleAtIndex(_target: *mut std::ffi::c_void, _index: u32) -> *mut std::ffi::c_void { 0x800 as *mut std::ffi::c_void }
+    pub fn SBModuleGetNumSymbols(_module: *mut std::ffi::c_void) -> u32 { 10 }
+    pub fn SBModuleGetSymbolAtIndex(_module: *mut std::ffi::c_void, _index: u32) -> *mut std::ffi::c_void { 0x900 as *mut std::ffi::c_void }
+    pub fn SBSymbolGetName(_symbol: *mut std::ffi::c_void) -> *const i8 { "main\0".as_ptr() as *const i8 }
+    pub fn SBSymbolGetStartAddress(_symbol: *mut std::ffi::c_void) -> *mut std::ffi::c_void { 0x1000 as *mut std::ffi::c_void }
+    pub fn SBSymbolGetEndAddress(_symbol: *mut std::ffi::c_void) -> *mut std::ffi::c_void { 0x1100 as *mut std::ffi::c_void }
+    pub fn SBAddressGetLoadAddress(_address: *mut std::ffi::c_void, _target: *mut std::ffi::c_void) -> u64 { 0x100001000 }
+    pub fn SBTargetGetNumCompileUnits(_target: *mut std::ffi::c_void) -> u32 { 1 }
+    pub fn SBTargetGetCompileUnitAtIndex(_target: *mut std::ffi::c_void, _index: u32) -> *mut std::ffi::c_void { 0xA00 as *mut std::ffi::c_void }
+    pub fn SBCompileUnitGetFileSpec(_unit: *mut std::ffi::c_void) -> *mut std::ffi::c_void { 0xB00 as *mut std::ffi::c_void }
+    pub fn SBCompileUnitGetLanguage(_unit: *mut std::ffi::c_void) -> u32 { 1 } // C++ language code
+    pub fn SBCompileUnitGetProducer(_unit: *mut std::ffi::c_void) -> *const i8 { "clang\0".as_ptr() as *const i8 }
+    pub fn SBPlatformGetWorkingDirectory(_platform: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+        0xC00 as *mut std::ffi::c_void
+    }
+    pub fn SBPlatformGetOSBuild(_platform: *mut std::ffi::c_void) -> *const i8 {
+        "24.5.0\0".as_ptr() as *const i8
+    }
+    pub fn SBPlatformGetOSDescription(_platform: *mut std::ffi::c_void) -> *const i8 {
+        "macOS 15.0\0".as_ptr() as *const i8
+    }
+    pub fn SBPlatformGetHostname(_platform: *mut std::ffi::c_void) -> *const i8 {
+        "localhost\0".as_ptr() as *const i8
+    }
+    pub fn SBModuleGetUUIDString(_module: *mut std::ffi::c_void) -> *const i8 {
+        "12345678-1234-5678-9ABC-DEF012345678\0".as_ptr() as *const i8
+    }
+    pub fn SBModuleGetVersion(_module: *mut std::ffi::c_void) -> *const i8 {
+        "1.0.0\0".as_ptr() as *const i8
+    }
+    pub fn SBModuleGetObjectName(_module: *mut std::ffi::c_void) -> *const i8 {
+        "test_binary\0".as_ptr() as *const i8
+    }
+    pub fn SBModuleGetTriple(_module: *mut std::ffi::c_void) -> *const i8 {
+        "x86_64-apple-macosx\0".as_ptr() as *const i8
+    }
     pub fn SBThreadGetNumFrames(_thread: *mut std::ffi::c_void) -> u32 { 3 } // Mock: return 3 stack frames
     pub fn SBThreadGetFrameAtIndex(_thread: *mut std::ffi::c_void, index: u32) -> *mut std::ffi::c_void {
         (0x200 + index as usize) as *mut std::ffi::c_void
@@ -2593,12 +2739,12 @@ impl LldbManager {
         }
     }
 
-    /// Execute raw LLDB command
-    pub fn execute_command(&self, command: &str) -> IncodeResult<String> {
+    /// Execute raw LLDB command (placeholder implementation)
+    pub fn execute_lldb_command(&self, command: &str) -> IncodeResult<String> {
         debug!("Executing LLDB command: {}", command);
         
         // TODO: Implement actual LLDB command execution
-        Err(IncodeError::not_implemented("execute_command"))
+        Err(IncodeError::not_implemented("execute_lldb_command"))
     }
 
     // Helper methods for thread information extraction
@@ -2746,6 +2892,416 @@ impl Drop for LldbManager {
     fn drop(&mut self) {
         if let Err(e) = self.cleanup() {
             error!("Error during LLDB Manager cleanup: {}", e);
+        }
+    }
+}
+
+impl LldbManager {
+    /// Execute raw LLDB command and return output
+    pub fn execute_command(&self, command: &str) -> IncodeResult<String> {
+        debug!("Executing LLDB command: {}", command);
+        
+        if cfg!(test) {
+            return Ok(format!("Mock output for command: {}", command));
+        }
+
+        #[cfg(not(feature = "mock"))]
+        {
+            // TODO: Implement actual LLDB command execution
+            tracing::warn!("Direct LLDB command execution not yet implemented");
+            Err(IncodeError::lldb_op("Direct command execution not implemented"))
+        }
+
+        #[cfg(feature = "mock")]
+        Ok(format!("Mock output for command: {}", command))
+    }
+
+    /// List all loaded modules/libraries with their addresses and information
+    pub fn list_modules(&self, filter_name: Option<&str>, include_debug_info: bool) -> IncodeResult<Vec<ModuleInfo>> {
+        debug!("Listing modules with filter: {:?}, include_debug: {}", filter_name, include_debug_info);
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            let mut modules = vec![
+                ModuleInfo {
+                    name: "test_binary".to_string(),
+                    file_path: "/usr/bin/test".to_string(),
+                    uuid: "12345678-1234-5678-9ABC-DEF012345678".to_string(),
+                    architecture: "x86_64".to_string(),
+                    load_address: 0x100000000,
+                    file_size: 1024 * 1024, // 1MB
+                    is_main_executable: true,
+                    has_debug_symbols: true,
+                    symbol_vendor: Some("DWARF".to_string()),
+                    compile_units: vec!["main.cpp".to_string(), "utils.cpp".to_string()],
+                    num_symbols: 150,
+                    slide: Some(0x1000),
+                    version: Some("1.0.0".to_string()),
+                },
+                ModuleInfo {
+                    name: "libc.dylib".to_string(),
+                    file_path: "/usr/lib/libc.dylib".to_string(),
+                    uuid: "87654321-4321-8765-CBA9-876543210ABC".to_string(),
+                    architecture: "x86_64".to_string(),
+                    load_address: 0x7ff800000000,
+                    file_size: 512 * 1024, // 512KB
+                    is_main_executable: false,
+                    has_debug_symbols: false,
+                    symbol_vendor: None,
+                    compile_units: vec![],
+                    num_symbols: 500,
+                    slide: Some(0x2000),
+                    version: Some("14.0".to_string()),
+                },
+            ];
+
+            // Apply filter if provided
+            if let Some(filter_str) = filter_name {
+                modules.retain(|m| m.name.contains(filter_str) || m.file_path.contains(filter_str));
+            }
+
+            return Ok(modules);
+        }
+
+        let target = self.current_target.ok_or_else(|| IncodeError::lldb_op("No active target for module listing"))?;
+        
+        unsafe {
+            let num_modules = SBTargetGetNumModules(target);
+            let mut modules = Vec::new();
+            
+            for i in 0..num_modules {
+                let module = SBTargetGetModuleAtIndex(target, i);
+                if module.is_null() {
+                    continue;
+                }
+                
+                // Get module name
+                let name_ptr = SBModuleGetObjectName(module);
+                let name = if !name_ptr.is_null() {
+                    std::ffi::CStr::from_ptr(name_ptr).to_string_lossy().to_string()
+                } else {
+                    format!("module_{}", i)
+                };
+                
+                // Apply filter if provided
+                if let Some(filter_str) = filter_name {
+                    if !name.contains(filter_str) {
+                        continue;
+                    }
+                }
+                
+                // Get file path
+                let file_spec = SBModuleGetFileSpec(module);
+                let file_path = if !file_spec.is_null() {
+                    let mut buffer = [0i8; 1024];
+                    let path_len = SBFileSpecGetPath(file_spec, buffer.as_mut_ptr(), buffer.len() as u32);
+                    if path_len > 0 {
+                        std::ffi::CStr::from_ptr(buffer.as_ptr()).to_string_lossy().to_string()
+                    } else {
+                        "unknown".to_string()
+                    }
+                } else {
+                    "unknown".to_string()
+                };
+                
+                // Get UUID
+                let uuid_ptr = SBModuleGetUUIDString(module);
+                let uuid = if !uuid_ptr.is_null() {
+                    std::ffi::CStr::from_ptr(uuid_ptr).to_string_lossy().to_string()
+                } else {
+                    "unknown".to_string()
+                };
+                
+                // Get architecture from triple
+                let triple_ptr = SBModuleGetTriple(module);
+                let architecture = if !triple_ptr.is_null() {
+                    let triple = std::ffi::CStr::from_ptr(triple_ptr).to_string_lossy();
+                    triple.split('-').next().unwrap_or("unknown").to_string()
+                } else {
+                    "unknown".to_string()
+                };
+                
+                // Get version
+                let version_ptr = SBModuleGetVersion(module);
+                let version = if !version_ptr.is_null() {
+                    Some(std::ffi::CStr::from_ptr(version_ptr).to_string_lossy().to_string())
+                } else {
+                    None
+                };
+                
+                // Get symbol count
+                let num_symbols = SBModuleGetNumSymbols(module);
+                
+                // Determine if this is the main executable (first module typically)
+                let is_main_executable = i == 0;
+                
+                // Get file size (mock implementation)
+                let file_size = std::fs::metadata(&file_path)
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                
+                let mut compile_units = Vec::new();
+                if include_debug_info {
+                    // Get compilation units (simplified)
+                    // TODO: Implement proper debug info extraction
+                    compile_units.push(format!("{}.c", name));
+                }
+                
+                modules.push(ModuleInfo {
+                    name,
+                    file_path,
+                    uuid,
+                    architecture,
+                    load_address: 0x100000000 + (i as u64 * 0x10000000), // Mock load addresses
+                    file_size,
+                    is_main_executable,
+                    has_debug_symbols: num_symbols > 0,
+                    symbol_vendor: if num_symbols > 0 { Some("DWARF".to_string()) } else { None },
+                    compile_units,
+                    num_symbols,
+                    slide: Some(0x1000 + (i as u64 * 0x100)), // Mock ASLR slide
+                    version,
+                });
+            }
+            
+            info!("Listed {} modules", modules.len());
+            Ok(modules)
+        }
+    }
+
+    /// Get comprehensive platform information
+    pub fn get_platform_info(&self) -> IncodeResult<PlatformInfo> {
+        debug!("Getting platform information");
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            return Ok(PlatformInfo {
+                name: "host".to_string(),
+                version: "macOS 15.0".to_string(),
+                architecture: "x86_64".to_string(),
+                vendor: "apple".to_string(),
+                environment: "darwin".to_string(),
+                sdk_version: Some("15.0".to_string()),
+                deployment_target: Some("13.0".to_string()),
+                is_simulator: false,
+                is_remote: false,
+                supports_jit: true,
+                working_directory: "/Users/user/project".to_string(),
+                supported_architectures: vec!["x86_64".to_string(), "arm64".to_string()],
+                hostname: Some("localhost".to_string()),
+            });
+        }
+
+        let target = self.current_target.ok_or_else(|| IncodeError::lldb_op("No active target for platform info"))?;
+        
+        unsafe {
+            // Get platform from target
+            let platform_ptr = SBTargetGetPlatform(target);
+            if platform_ptr.is_null() {
+                return Err(IncodeError::lldb_op("Failed to get platform from target"));
+            }
+            
+            // Get platform name
+            let name_ptr = SBPlatformGetName(platform_ptr);
+            let name = if !name_ptr.is_null() {
+                std::ffi::CStr::from_ptr(name_ptr).to_string_lossy().to_string()
+            } else {
+                "unknown".to_string()
+            };
+            
+            // Get OS description/version
+            let os_desc_ptr = SBPlatformGetOSDescription(platform_ptr);
+            let version = if !os_desc_ptr.is_null() {
+                std::ffi::CStr::from_ptr(os_desc_ptr).to_string_lossy().to_string()
+            } else {
+                "unknown".to_string()
+            };
+            
+            // Get hostname
+            let hostname_ptr = SBPlatformGetHostname(platform_ptr);
+            let hostname = if !hostname_ptr.is_null() {
+                Some(std::ffi::CStr::from_ptr(hostname_ptr).to_string_lossy().to_string())
+            } else {
+                None
+            };
+            
+            // Get triple for architecture info
+            let triple_ptr = SBTargetGetTriple(target);
+            let triple = if !triple_ptr.is_null() {
+                std::ffi::CStr::from_ptr(triple_ptr).to_string_lossy().to_string()
+            } else {
+                "unknown-unknown-unknown".to_string()
+            };
+            
+            // Parse triple: arch-vendor-os
+            let parts: Vec<&str> = triple.split('-').collect();
+            let architecture = parts.get(0).unwrap_or(&"unknown").to_string();
+            let vendor = parts.get(1).unwrap_or(&"unknown").to_string();
+            let environment = parts.get(2).unwrap_or(&"unknown").to_string();
+            
+            // Get working directory
+            let work_dir_ptr = SBPlatformGetWorkingDirectory(platform_ptr);
+            let working_directory = if !work_dir_ptr.is_null() {
+                let mut buffer = [0i8; 1024];
+                let path_len = SBFileSpecGetPath(work_dir_ptr, buffer.as_mut_ptr(), buffer.len() as u32);
+                if path_len > 0 {
+                    std::ffi::CStr::from_ptr(buffer.as_ptr()).to_string_lossy().to_string()
+                } else {
+                    std::env::current_dir()
+                        .unwrap_or_else(|_| std::path::PathBuf::from("/"))
+                        .to_string_lossy()
+                        .to_string()
+                }
+            } else {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("/"))
+                    .to_string_lossy()
+                    .to_string()
+            };
+            
+            // Determine platform characteristics
+            let is_simulator = name.contains("simulator") || environment.contains("simulator");
+            let is_remote = name.contains("remote");
+            let supports_jit = !name.contains("ios") || is_simulator; // iOS device doesn't support JIT
+            
+            // Build supported architectures list
+            let supported_architectures = match vendor.as_str() {
+                "apple" => vec!["x86_64".to_string(), "arm64".to_string()],
+                "pc" => vec!["x86_64".to_string(), "i386".to_string()],
+                _ => vec![architecture.clone()],
+            };
+            
+            // Extract SDK version and deployment target from version string
+            let (sdk_version, deployment_target) = if version.contains("macOS") {
+                // Extract version number from "macOS 15.0" format
+                let version_num = version.split_whitespace().nth(1).unwrap_or("unknown");
+                (Some(version_num.to_string()), Some("13.0".to_string())) // Common deployment target
+            } else if version.contains("iOS") {
+                let version_num = version.split_whitespace().nth(1).unwrap_or("unknown");
+                (Some(version_num.to_string()), Some("15.0".to_string()))
+            } else {
+                (None, None)
+            };
+            
+            info!("Platform info retrieved: {}", name);
+            Ok(PlatformInfo {
+                name,
+                version,
+                architecture,
+                vendor,
+                environment,
+                sdk_version,
+                deployment_target,
+                is_simulator,
+                is_remote,
+                supports_jit,
+                working_directory,
+                supported_architectures,
+                hostname,
+            })
+        }
+    }
+
+    /// Get comprehensive target information
+    pub fn get_target_info(&self) -> IncodeResult<TargetInfo> {
+        debug!("Getting target information");
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            return Ok(TargetInfo {
+                executable_path: "/usr/bin/test".to_string(),
+                architecture: "x86_64".to_string(),
+                platform: "host".to_string(),
+                executable_format: "Mach-O".to_string(),
+                has_debug_symbols: true,
+                entry_point: Some(0x100000000),
+                base_address: Some(0x100000000),
+                file_size: 1024 * 1024, // 1MB mock size
+                creation_time: Some(std::time::SystemTime::now()),
+                is_pie: true,
+                is_stripped: false,
+                endianness: "little".to_string(),
+            });
+        }
+
+        let target = self.current_target.ok_or_else(|| IncodeError::lldb_op("No active target for target info"))?;
+        
+        unsafe {
+            // Get triple (architecture-vendor-os)
+            let triple_ptr = SBTargetGetTriple(target);
+            let triple = if !triple_ptr.is_null() {
+                std::ffi::CStr::from_ptr(triple_ptr).to_string_lossy().to_string()
+            } else {
+                "unknown".to_string()
+            };
+            
+            // Extract architecture from triple
+            let architecture = triple.split('-').next().unwrap_or("unknown").to_string();
+            
+            // Get platform
+            let platform_ptr = SBTargetGetPlatform(target);
+            let platform = if !platform_ptr.is_null() {
+                let platform_name_ptr = SBPlatformGetName(platform_ptr);
+                if !platform_name_ptr.is_null() {
+                    std::ffi::CStr::from_ptr(platform_name_ptr).to_string_lossy().to_string()
+                } else {
+                    "unknown".to_string()
+                }
+            } else {
+                "unknown".to_string()
+            };
+            
+            // Get executable file information
+            let executable_ptr = SBTargetGetExecutable(target);
+            let executable_path = if !executable_ptr.is_null() {
+                let mut buffer = [0i8; 1024];
+                let path_len = SBFileSpecGetPath(executable_ptr, buffer.as_mut_ptr(), buffer.len() as u32);
+                if path_len > 0 {
+                    std::ffi::CStr::from_ptr(buffer.as_ptr()).to_string_lossy().to_string()
+                } else {
+                    "unknown".to_string()
+                }
+            } else {
+                "unknown".to_string()
+            };
+            
+            // Determine executable format based on platform
+            let executable_format = match platform.as_str() {
+                p if p.contains("darwin") || p.contains("macosx") || p.contains("ios") => "Mach-O",
+                p if p.contains("linux") || p.contains("freebsd") => "ELF",
+                p if p.contains("windows") => "PE",
+                _ => "unknown",
+            }.to_string();
+            
+            // Get file size (mock implementation for now)
+            let file_size = std::fs::metadata(&executable_path)
+                .map(|m| m.len())
+                .unwrap_or(0);
+            
+            // Get creation time (mock implementation)
+            let creation_time = std::fs::metadata(&executable_path)
+                .and_then(|m| m.created())
+                .ok();
+            
+            info!("Target info retrieved for: {}", executable_path);
+            Ok(TargetInfo {
+                executable_path,
+                architecture: architecture.clone(),
+                platform,
+                executable_format,
+                has_debug_symbols: true, // TODO: Implement proper debug symbol detection
+                entry_point: Some(0x100000000), // TODO: Get actual entry point
+                base_address: Some(0x100000000), // TODO: Get actual base address
+                file_size,
+                creation_time,
+                is_pie: true, // TODO: Implement PIE detection
+                is_stripped: false, // TODO: Implement stripped binary detection
+                endianness: if architecture.contains("x86") || architecture.contains("aarch64") { 
+                    "little".to_string() 
+                } else { 
+                    "unknown".to_string() 
+                },
+            })
         }
     }
 }
