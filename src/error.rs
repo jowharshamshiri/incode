@@ -48,6 +48,12 @@ pub enum IncodeError {
 
     #[error("Not implemented: {0}")]
     NotImplemented(String),
+    
+    #[error("Invalid parameter: {0}")]
+    InvalidParameter(String),
+    
+    #[error("Process error: {0}")]
+    ProcessError(String),
 }
 
 impl IncodeError {
@@ -97,5 +103,17 @@ impl IncodeError {
 
     pub fn not_implemented<S: Into<String>>(feature: S) -> Self {
         Self::NotImplemented(feature.into())
+    }
+    
+    pub fn invalid_parameter<S: Into<String>>(msg: S) -> Self {
+        Self::InvalidParameter(msg.into())
+    }
+    
+    pub fn process<S: Into<String>>(msg: S) -> Self {
+        Self::ProcessError(msg.into())
+    }
+    
+    pub fn no_process() -> Self {
+        Self::ProcessError("No process attached".to_string())
     }
 }

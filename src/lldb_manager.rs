@@ -62,6 +62,108 @@ pub struct VariableInfo {
 }
 
 #[derive(Debug, Clone)]
+pub struct StackFrame {
+    pub index: u32,
+    pub function_name: String,
+    pub file_path: Option<String>,
+    pub line_number: Option<u32>,
+    pub address: u64,
+    pub is_inlined: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ThreadInfo {
+    pub thread_id: u32,
+    pub index: u32,
+    pub name: Option<String>,
+    pub state: String,
+    pub stop_reason: Option<String>,
+    pub queue_name: Option<String>,
+    pub frame_count: u32,
+    pub current_frame: Option<StackFrame>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RegisterInfo {
+    pub name: String,
+    pub value: u64,
+    pub size: u32,
+    pub register_type: String,
+    pub format: String,
+    pub is_valid: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RegisterState {
+    pub registers: HashMap<String, RegisterInfo>,
+    pub timestamp: std::time::SystemTime,
+    pub thread_id: Option<u32>,
+    pub frame_index: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SourceLocation {
+    pub file_path: String,
+    pub line_number: u32,
+    pub column: Option<u32>,
+    pub function_name: Option<String>,
+    pub address: u64,
+    pub is_valid: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SourceCode {
+    pub file_path: String,
+    pub lines: Vec<SourceLine>,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub current_line: Option<u32>,
+    pub total_lines: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SourceLine {
+    pub line_number: u32,
+    pub content: String,
+    pub is_current: bool,
+    pub has_breakpoint: bool,
+    pub address: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionInfo {
+    pub name: String,
+    pub mangled_name: Option<String>,
+    pub start_address: u64,
+    pub end_address: Option<u64>,
+    pub file_path: Option<String>,
+    pub line_number: Option<u32>,
+    pub size: Option<u64>,
+    pub is_inline: bool,
+    pub return_type: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugInfo {
+    pub has_debug_symbols: bool,
+    pub debug_format: String,
+    pub compilation_units: Vec<CompilationUnit>,
+    pub symbol_count: u32,
+    pub line_table_count: u32,
+    pub function_count: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct CompilationUnit {
+    pub file_path: String,
+    pub producer: Option<String>,
+    pub language: Option<String>,
+    pub low_pc: u64,
+    pub high_pc: u64,
+    pub line_count: u32,
+}
+
+#[derive(Debug, Clone)]
 pub struct ProcessInfo {
     pub pid: u32,
     pub state: String,
@@ -105,6 +207,32 @@ extern "C" {
     fn SBProcessKill(process: *mut std::ffi::c_void) -> bool;
     fn SBProcessContinue(process: *mut std::ffi::c_void) -> bool;
     fn SBTargetGetProcess(target: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBProcessGetNumThreads(process: *mut std::ffi::c_void) -> u32;
+    fn SBProcessGetThreadAtIndex(process: *mut std::ffi::c_void, index: u32) -> *mut std::ffi::c_void;
+    fn SBThreadGetThreadID(thread: *mut std::ffi::c_void) -> u32;
+    fn SBThreadGetIndexID(thread: *mut std::ffi::c_void) -> u32;
+    fn SBThreadGetSelectedFrame(thread: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBFrameGetRegisters(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBValueListGetSize(value_list: *mut std::ffi::c_void) -> u32;
+    fn SBValueListGetValueAtIndex(value_list: *mut std::ffi::c_void, index: u32) -> *mut std::ffi::c_void;
+    fn SBValueGetName(value: *mut std::ffi::c_void) -> *const i8;
+    fn SBValueGetValueAsUnsigned(value: *mut std::ffi::c_void) -> u64;
+    fn SBValueSetValueFromCString(value: *mut std::ffi::c_void, value_str: *const i8) -> bool;
+    fn SBFrameGetLineEntry(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBLineEntryGetFileSpec(line_entry: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBFileSpecGetFilename(file_spec: *mut std::ffi::c_void) -> *const i8;
+    fn SBFileSpecGetDirectory(file_spec: *mut std::ffi::c_void) -> *const i8;
+    fn SBLineEntryGetLine(line_entry: *mut std::ffi::c_void) -> u32;
+    fn SBLineEntryGetColumn(line_entry: *mut std::ffi::c_void) -> u32;
+    fn SBTargetGetNumModules(target: *mut std::ffi::c_void) -> u32;
+    fn SBTargetGetModuleAtIndex(target: *mut std::ffi::c_void, index: u32) -> *mut std::ffi::c_void;
+    fn SBModuleGetFileSpec(module: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBModuleGetNumSymbols(module: *mut std::ffi::c_void) -> u32;
+    fn SBModuleGetSymbolAtIndex(module: *mut std::ffi::c_void, index: u32) -> *mut std::ffi::c_void;
+    fn SBSymbolGetName(symbol: *mut std::ffi::c_void) -> *const i8;
+    fn SBSymbolGetStartAddress(symbol: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBSymbolGetEndAddress(symbol: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SBAddressGetLoadAddress(address: *mut std::ffi::c_void, target: *mut std::ffi::c_void) -> u64;
     fn SBThreadStepOver(thread: *mut std::ffi::c_void) -> bool;
     fn SBThreadStepInto(thread: *mut std::ffi::c_void) -> bool;
     fn SBThreadStepOut(thread: *mut std::ffi::c_void) -> bool;
@@ -130,9 +258,7 @@ extern "C" {
     fn SBFrameGetPC(frame: *mut std::ffi::c_void) -> u64;
     fn SBFrameGetSP(frame: *mut std::ffi::c_void) -> u64;
     fn SBThreadSetSelectedFrame(thread: *mut std::ffi::c_void, frame: *mut std::ffi::c_void) -> bool;
-    fn SBThreadGetSelectedFrame(thread: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn SBFrameGetModule(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn SBFrameGetLineEntry(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn SBProcessReadMemory(process: *mut std::ffi::c_void, address: u64, size: u32, buffer: *mut u8) -> u32;
     fn SBProcessWriteMemory(process: *mut std::ffi::c_void, address: u64, data: *const u8, size: u32) -> u32;
     fn SBTargetReadInstructions(target: *mut std::ffi::c_void, address: u64, count: u32) -> *mut std::ffi::c_void;
@@ -250,6 +376,7 @@ pub struct LldbManager {
     current_target: Option<*mut std::ffi::c_void>,
     current_process: Option<*mut std::ffi::c_void>,
     current_thread: Option<*mut std::ffi::c_void>,
+    current_thread_id: Option<u32>,
     current_frame_index: u32,
 }
 
@@ -289,6 +416,7 @@ impl LldbManager {
             current_target: None,
             current_process: None,
             current_thread: None,
+            current_thread_id: None,
             current_frame_index: 0,
         })
     }
@@ -1687,19 +1815,782 @@ impl LldbManager {
     }
 
     /// Get thread list
-    pub fn list_threads(&self) -> IncodeResult<Vec<(u32, String)>> {
+    pub fn list_threads(&self) -> IncodeResult<Vec<ThreadInfo>> {
         debug!("Listing threads");
         
-        // TODO: Implement actual thread listing
-        Err(IncodeError::not_implemented("list_threads"))
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Returning sample thread list");
+            Ok(vec![
+                ThreadInfo {
+                    thread_id: 1,
+                    index: 0,
+                    name: Some("main".to_string()),
+                    state: "stopped".to_string(),
+                    stop_reason: Some("breakpoint".to_string()),
+                    queue_name: Some("com.apple.main-thread".to_string()),
+                    frame_count: 5,
+                    current_frame: Some(StackFrame {
+                        index: 0,
+                        function_name: "main".to_string(),
+                        file_path: Some("/path/to/main.c".to_string()),
+                        line_number: Some(42),
+                        address: 0x100001000,
+                        is_inlined: false,
+                    }),
+                },
+                ThreadInfo {
+                    thread_id: 2,
+                    index: 1,
+                    name: Some("worker_thread".to_string()),
+                    state: "running".to_string(),
+                    stop_reason: None,
+                    queue_name: Some("com.apple.worker-queue".to_string()),
+                    frame_count: 3,
+                    current_frame: Some(StackFrame {
+                        index: 0,
+                        function_name: "worker_loop".to_string(),
+                        file_path: Some("/path/to/worker.c".to_string()),
+                        line_number: Some(128),
+                        address: 0x100002000,
+                        is_inlined: false,
+                    }),
+                }
+            ])
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            if let Some(process) = self.current_process {
+                let num_threads = unsafe { SBProcessGetNumThreads(process) };
+                let mut threads = Vec::new();
+                
+                for i in 0..num_threads {
+                    let thread = unsafe { SBProcessGetThreadAtIndex(process, i) };
+                    if thread.is_null() {
+                        continue;
+                    }
+                    
+                    let thread_id = unsafe { SBThreadGetThreadID(thread) };
+                    let index = unsafe { SBThreadGetIndexID(thread) };
+                    let state_str = self.get_thread_state_string(thread);
+                    let stop_reason = self.get_thread_stop_reason(thread);
+                    let queue_name = self.get_thread_queue_name(thread);
+                    let name = self.get_thread_name(thread);
+                    let frame_count = unsafe { SBThreadGetNumFrames(thread) };
+                    
+                    let current_frame = if frame_count > 0 {
+                        let frame = unsafe { SBThreadGetFrameAtIndex(thread, 0) };
+                        if !frame.is_null() {
+                            // TODO: Implement actual frame extraction
+                            Some(StackFrame {
+                                index: 0,
+                                function_name: "function".to_string(),
+                                file_path: Some("/path/to/file".to_string()),
+                                line_number: Some(1),
+                                address: 0x100000000,
+                                is_inlined: false,
+                            })
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    
+                    threads.push(ThreadInfo {
+                        thread_id,
+                        index,
+                        name,
+                        state: state_str,
+                        stop_reason,
+                        queue_name,
+                        frame_count,
+                        current_frame,
+                    });
+                }
+                
+                debug!("Found {} threads", threads.len());
+                Ok(threads)
+            } else {
+                Err(IncodeError::no_process())
+            }
+        }
     }
 
-    /// Get register values
-    pub fn get_registers(&self) -> IncodeResult<HashMap<String, u64>> {
-        debug!("Getting registers");
+    /// Get register values for current thread/frame
+    pub fn get_registers(&self, thread_id: Option<u32>, include_metadata: bool) -> IncodeResult<RegisterState> {
+        debug!("Getting registers for thread: {:?}", thread_id);
         
-        // TODO: Implement actual register reading
-        Err(IncodeError::not_implemented("get_registers"))
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Returning sample register state");
+            let mut registers = HashMap::new();
+            
+            // Common x86_64 registers
+            registers.insert("rax".to_string(), RegisterInfo {
+                name: "rax".to_string(),
+                value: 0x12345678,
+                size: 8,
+                register_type: "general".to_string(),
+                format: "hex".to_string(),
+                is_valid: true,
+            });
+            
+            registers.insert("rbx".to_string(), RegisterInfo {
+                name: "rbx".to_string(),
+                value: 0x87654321,
+                size: 8,
+                register_type: "general".to_string(),
+                format: "hex".to_string(),
+                is_valid: true,
+            });
+            
+            registers.insert("rip".to_string(), RegisterInfo {
+                name: "rip".to_string(),
+                value: 0x100001234,
+                size: 8,
+                register_type: "program_counter".to_string(),
+                format: "hex".to_string(),
+                is_valid: true,
+            });
+            
+            registers.insert("rsp".to_string(), RegisterInfo {
+                name: "rsp".to_string(),
+                value: 0x7fff5fbff000,
+                size: 8,
+                register_type: "stack_pointer".to_string(),
+                format: "hex".to_string(),
+                is_valid: true,
+            });
+            
+            Ok(RegisterState {
+                registers,
+                timestamp: std::time::SystemTime::now(),
+                thread_id,
+                frame_index: Some(0),
+            })
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            if let Some(current_thread) = self.current_thread {
+                let frame = unsafe { SBThreadGetSelectedFrame(current_thread) };
+                if frame.is_null() {
+                    return Err(IncodeError::frame("No current frame available"));
+                }
+                
+                let register_list = unsafe { SBFrameGetRegisters(frame) };
+                if register_list.is_null() {
+                    return Err(IncodeError::frame("Cannot access registers"));
+                }
+                
+                let mut registers = HashMap::new();
+                let num_register_sets = unsafe { SBValueListGetSize(register_list) };
+                
+                for i in 0..num_register_sets {
+                    let register_set = unsafe { SBValueListGetValueAtIndex(register_list, i) };
+                    if register_set.is_null() {
+                        continue;
+                    }
+                    
+                    let set_size = unsafe { SBValueListGetSize(register_set) };
+                    for j in 0..set_size {
+                        let register = unsafe { SBValueListGetValueAtIndex(register_set, j) };
+                        if register.is_null() {
+                            continue;
+                        }
+                        
+                        let name_ptr = unsafe { SBValueGetName(register) };
+                        if name_ptr.is_null() {
+                            continue;
+                        }
+                        
+                        let name = unsafe {
+                            std::ffi::CStr::from_ptr(name_ptr)
+                                .to_string_lossy()
+                                .to_string()
+                        };
+                        
+                        let value = unsafe { SBValueGetValueAsUnsigned(register) };
+                        
+                        registers.insert(name.clone(), RegisterInfo {
+                            name,
+                            value,
+                            size: 8, // TODO: Get actual size
+                            register_type: "general".to_string(), // TODO: Determine type
+                            format: "hex".to_string(),
+                            is_valid: true,
+                        });
+                    }
+                }
+                
+                debug!("Found {} registers", registers.len());
+                Ok(RegisterState {
+                    registers,
+                    timestamp: std::time::SystemTime::now(),
+                    thread_id,
+                    frame_index: Some(0),
+                })
+            } else {
+                Err(IncodeError::thread("No current thread selected"))
+            }
+        }
+    }
+
+    /// Set register value
+    pub fn set_register(&mut self, register_name: &str, value: u64, thread_id: Option<u32>) -> IncodeResult<bool> {
+        debug!("Setting register {} to value: 0x{:x}", register_name, value);
+        
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Setting register {} to 0x{:x}", register_name, value);
+            
+            // Validate register name format
+            if register_name.is_empty() || register_name.len() > 16 {
+                return Err(IncodeError::invalid_parameter("Invalid register name"));
+            }
+            
+            // Simulate success for valid register names
+            Ok(true)
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            if let Some(current_thread) = self.current_thread {
+                let frame = unsafe { SBThreadGetSelectedFrame(current_thread) };
+                if frame.is_null() {
+                    return Err(IncodeError::frame("No current frame available"));
+                }
+                
+                let register_list = unsafe { SBFrameGetRegisters(frame) };
+                if register_list.is_null() {
+                    return Err(IncodeError::frame("Cannot access registers"));
+                }
+                
+                // Find the register by name
+                let num_register_sets = unsafe { SBValueListGetSize(register_list) };
+                for i in 0..num_register_sets {
+                    let register_set = unsafe { SBValueListGetValueAtIndex(register_list, i) };
+                    if register_set.is_null() {
+                        continue;
+                    }
+                    
+                    let set_size = unsafe { SBValueListGetSize(register_set) };
+                    for j in 0..set_size {
+                        let register = unsafe { SBValueListGetValueAtIndex(register_set, j) };
+                        if register.is_null() {
+                            continue;
+                        }
+                        
+                        let name_ptr = unsafe { SBValueGetName(register) };
+                        if name_ptr.is_null() {
+                            continue;
+                        }
+                        
+                        let name = unsafe {
+                            std::ffi::CStr::from_ptr(name_ptr)
+                                .to_string_lossy()
+                                .to_string()
+                        };
+                        
+                        if name == register_name {
+                            let value_str = format!("0x{:x}", value);
+                            let value_cstr = std::ffi::CString::new(value_str)
+                                .map_err(|_| IncodeError::invalid_parameter("Invalid value format"))?;
+                            
+                            let success = unsafe {
+                                SBValueSetValueFromCString(register, value_cstr.as_ptr())
+                            };
+                            
+                            debug!("Register {} set to 0x{:x}, success: {}", register_name, value, success);
+                            return Ok(success);
+                        }
+                    }
+                }
+                
+                Err(IncodeError::invalid_parameter(format!("Register '{}' not found", register_name)))
+            } else {
+                Err(IncodeError::thread("No current thread selected"))
+            }
+        }
+    }
+
+    /// Get detailed register information
+    pub fn get_register_info(&self, register_name: &str, thread_id: Option<u32>) -> IncodeResult<RegisterInfo> {
+        debug!("Getting register info for: {}", register_name);
+        
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Getting info for register {}", register_name);
+            
+            // Return mock register info based on common register names
+            let (value, size, reg_type) = match register_name.to_lowercase().as_str() {
+                "rax" | "rbx" | "rcx" | "rdx" => (0x12345678, 8, "general"),
+                "rip" => (0x100001234, 8, "program_counter"), 
+                "rsp" | "rbp" => (0x7fff5fbff000, 8, "stack_pointer"),
+                "eax" | "ebx" | "ecx" | "edx" => (0x12345678, 4, "general"),
+                "ax" | "bx" | "cx" | "dx" => (0x1234, 2, "general"),
+                "al" | "bl" | "cl" | "dl" => (0x12, 1, "general"),
+                "xmm0" | "xmm1" | "xmm2" | "xmm3" => (0x0, 16, "vector"),
+                _ => (0x0, 8, "unknown"),
+            };
+            
+            Ok(RegisterInfo {
+                name: register_name.to_string(),
+                value,
+                size,
+                register_type: reg_type.to_string(),
+                format: "hex".to_string(),
+                is_valid: true,
+            })
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            // Get current register state and find the specific register
+            let register_state = self.get_registers(thread_id, true)?;
+            
+            register_state.registers.get(register_name)
+                .cloned()
+                .ok_or_else(|| IncodeError::invalid_parameter(format!("Register '{}' not found", register_name)))
+        }
+    }
+
+    /// Save current register state
+    pub fn save_register_state(&self, thread_id: Option<u32>) -> IncodeResult<RegisterState> {
+        debug!("Saving register state for thread: {:?}", thread_id);
+        
+        // Use existing get_registers implementation
+        self.get_registers(thread_id, true)
+    }
+
+    /// Get source code around current location
+    pub fn get_source_code(&self, address: Option<u64>, context_lines: u32) -> IncodeResult<SourceCode> {
+        debug!("Getting source code for address: {:?}, context: {}", address, context_lines);
+        
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Returning sample source code");
+            
+            let lines = vec![
+                SourceLine {
+                    line_number: 38,
+                    content: "#include <stdio.h>".to_string(),
+                    is_current: false,
+                    has_breakpoint: false,
+                    address: None,
+                },
+                SourceLine {
+                    line_number: 39,
+                    content: "".to_string(),
+                    is_current: false,
+                    has_breakpoint: false,
+                    address: None,
+                },
+                SourceLine {
+                    line_number: 40,
+                    content: "int main() {".to_string(),
+                    is_current: false,
+                    has_breakpoint: true,
+                    address: Some(0x100001000),
+                },
+                SourceLine {
+                    line_number: 41,
+                    content: "    printf(\"Hello, World!\\n\");".to_string(),
+                    is_current: true,
+                    has_breakpoint: false,
+                    address: Some(0x100001010),
+                },
+                SourceLine {
+                    line_number: 42,
+                    content: "    return 0;".to_string(),
+                    is_current: false,
+                    has_breakpoint: false,
+                    address: Some(0x100001020),
+                },
+                SourceLine {
+                    line_number: 43,
+                    content: "}".to_string(),
+                    is_current: false,
+                    has_breakpoint: false,
+                    address: Some(0x100001030),
+                },
+            ];
+            
+            Ok(SourceCode {
+                file_path: "/path/to/main.c".to_string(),
+                lines,
+                start_line: 38,
+                end_line: 43,
+                current_line: Some(41),
+                total_lines: Some(100),
+            })
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            if let Some(current_thread) = self.current_thread {
+                let frame = unsafe { SBThreadGetSelectedFrame(current_thread) };
+                if frame.is_null() {
+                    return Err(IncodeError::frame("No current frame available"));
+                }
+                
+                let line_entry = unsafe { SBFrameGetLineEntry(frame) };
+                if line_entry.is_null() {
+                    return Err(IncodeError::frame("No line information available"));
+                }
+                
+                let file_spec = unsafe { SBLineEntryGetFileSpec(line_entry) };
+                if file_spec.is_null() {
+                    return Err(IncodeError::frame("No file information available"));
+                }
+                
+                // Get file path
+                let filename_ptr = unsafe { SBFileSpecGetFilename(file_spec) };
+                let directory_ptr = unsafe { SBFileSpecGetDirectory(file_spec) };
+                
+                let filename = if !filename_ptr.is_null() {
+                    unsafe { std::ffi::CStr::from_ptr(filename_ptr).to_string_lossy().to_string() }
+                } else {
+                    "unknown".to_string()
+                };
+                
+                let directory = if !directory_ptr.is_null() {
+                    unsafe { std::ffi::CStr::from_ptr(directory_ptr).to_string_lossy().to_string() }
+                } else {
+                    "".to_string()
+                };
+                
+                let file_path = if directory.is_empty() {
+                    filename
+                } else {
+                    format!("{}/{}", directory, filename)
+                };
+                
+                let current_line = unsafe { SBLineEntryGetLine(line_entry) };
+                
+                // TODO: Read actual file content and create SourceLine entries
+                let lines = vec![
+                    SourceLine {
+                        line_number: current_line,
+                        content: "// Source code not available".to_string(),
+                        is_current: true,
+                        has_breakpoint: false,
+                        address: None,
+                    }
+                ];
+                
+                debug!("Found source location: {} line {}", file_path, current_line);
+                Ok(SourceCode {
+                    file_path,
+                    lines,
+                    start_line: current_line,
+                    end_line: current_line,
+                    current_line: Some(current_line),
+                    total_lines: None,
+                })
+            } else {
+                Err(IncodeError::thread("No current thread selected"))
+            }
+        }
+    }
+
+    /// List all functions with addresses  
+    pub fn list_functions(&self, module_filter: Option<&str>) -> IncodeResult<Vec<FunctionInfo>> {
+        debug!("Listing functions with module filter: {:?}", module_filter);
+        
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Returning sample function list");
+            Ok(vec![
+                FunctionInfo {
+                    name: "main".to_string(),
+                    mangled_name: None,
+                    start_address: 0x100001000,
+                    end_address: Some(0x100001040),
+                    file_path: Some("/path/to/main.c".to_string()),
+                    line_number: Some(40),
+                    size: Some(64),
+                    is_inline: false,
+                    return_type: Some("int".to_string()),
+                },
+                FunctionInfo {
+                    name: "printf".to_string(),
+                    mangled_name: Some("_printf".to_string()),
+                    start_address: 0x7fff8c2a1000,
+                    end_address: None,
+                    file_path: None,
+                    line_number: None,
+                    size: None,
+                    is_inline: false,
+                    return_type: Some("int".to_string()),
+                },
+                FunctionInfo {
+                    name: "helper_function".to_string(),
+                    mangled_name: None,
+                    start_address: 0x100001100,
+                    end_address: Some(0x100001180),
+                    file_path: Some("/path/to/helper.c".to_string()),
+                    line_number: Some(15),
+                    size: Some(128),
+                    is_inline: false,
+                    return_type: Some("void".to_string()),
+                },
+            ])
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            if let Some(target) = self.current_target {
+                let num_modules = unsafe { SBTargetGetNumModules(target) };
+                let mut functions = Vec::new();
+                
+                for i in 0..num_modules {
+                    let module = unsafe { SBTargetGetModuleAtIndex(target, i) };
+                    if module.is_null() {
+                        continue;
+                    }
+                    
+                    // TODO: Get module name and apply filter
+                    
+                    let num_symbols = unsafe { SBModuleGetNumSymbols(module) };
+                    for j in 0..num_symbols {
+                        let symbol = unsafe { SBModuleGetSymbolAtIndex(module, j) };
+                        if symbol.is_null() {
+                            continue;
+                        }
+                        
+                        let name_ptr = unsafe { SBSymbolGetName(symbol) };
+                        if name_ptr.is_null() {
+                            continue;
+                        }
+                        
+                        let name = unsafe {
+                            std::ffi::CStr::from_ptr(name_ptr)
+                                .to_string_lossy()
+                                .to_string()
+                        };
+                        
+                        let start_addr_obj = unsafe { SBSymbolGetStartAddress(symbol) };
+                        let start_address = if !start_addr_obj.is_null() {
+                            unsafe { SBAddressGetLoadAddress(start_addr_obj, target) }
+                        } else {
+                            0
+                        };
+                        
+                        let end_addr_obj = unsafe { SBSymbolGetEndAddress(symbol) };
+                        let end_address = if !end_addr_obj.is_null() {
+                            let addr = unsafe { SBAddressGetLoadAddress(end_addr_obj, target) };
+                            if addr != 0 { Some(addr) } else { None }
+                        } else {
+                            None
+                        };
+                        
+                        functions.push(FunctionInfo {
+                            name,
+                            mangled_name: None, // TODO: Get mangled name
+                            start_address,
+                            end_address,
+                            file_path: None, // TODO: Get source file
+                            line_number: None, // TODO: Get line number
+                            size: end_address.map(|end| if end > start_address { end - start_address } else { 0 }),
+                            is_inline: false, // TODO: Determine if inline
+                            return_type: None, // TODO: Get return type
+                        });
+                    }
+                }
+                
+                debug!("Found {} functions", functions.len());
+                Ok(functions)
+            } else {
+                Err(IncodeError::process("No target available"))
+            }
+        }
+    }
+
+    /// Get source line information for address
+    pub fn get_line_info(&self, address: u64) -> IncodeResult<SourceLocation> {
+        debug!("Getting line info for address: 0x{:x}", address);
+        
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Returning sample line info for 0x{:x}", address);
+            Ok(SourceLocation {
+                file_path: "/path/to/main.c".to_string(),
+                line_number: 41,
+                column: Some(5),
+                function_name: Some("main".to_string()),
+                address,
+                is_valid: true,
+            })
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            // TODO: Implement actual address-to-source mapping using LLDB
+            Err(IncodeError::not_implemented("get_line_info"))
+        }
+    }
+
+    /// Get debug information summary  
+    pub fn get_debug_info(&self) -> IncodeResult<DebugInfo> {
+        debug!("Getting debug information summary");
+        
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Returning sample debug info");
+            Ok(DebugInfo {
+                has_debug_symbols: true,
+                debug_format: "DWARF".to_string(),
+                compilation_units: vec![
+                    CompilationUnit {
+                        file_path: "/path/to/main.c".to_string(),
+                        producer: Some("clang version 14.0.0".to_string()),
+                        language: Some("C".to_string()),
+                        low_pc: 0x100001000,
+                        high_pc: 0x100001200,
+                        line_count: 50,
+                    },
+                    CompilationUnit {
+                        file_path: "/path/to/helper.c".to_string(),
+                        producer: Some("clang version 14.0.0".to_string()),
+                        language: Some("C".to_string()),
+                        low_pc: 0x100001200,
+                        high_pc: 0x100001400,
+                        line_count: 30,
+                    },
+                ],
+                symbol_count: 150,
+                line_table_count: 80,
+                function_count: 12,
+            })
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            if let Some(target) = self.current_target {
+                let num_modules = unsafe { SBTargetGetNumModules(target) };
+                let mut compilation_units = Vec::new();
+                let mut total_symbols = 0;
+                
+                for i in 0..num_modules {
+                    let module = unsafe { SBTargetGetModuleAtIndex(target, i) };
+                    if module.is_null() {
+                        continue;
+                    }
+                    
+                    let num_symbols = unsafe { SBModuleGetNumSymbols(module) };
+                    total_symbols += num_symbols;
+                    
+                    // TODO: Extract compilation unit information
+                }
+                
+                debug!("Found {} modules with {} total symbols", num_modules, total_symbols);
+                Ok(DebugInfo {
+                    has_debug_symbols: total_symbols > 0,
+                    debug_format: "DWARF".to_string(), // TODO: Detect actual format
+                    compilation_units,
+                    symbol_count: total_symbols,
+                    line_table_count: 0, // TODO: Count line tables
+                    function_count: 0,   // TODO: Count functions
+                })
+            } else {
+                Err(IncodeError::process("No target available"))
+            }
+        }
+    }
+
+    /// Select thread for debugging
+    pub fn select_thread(&mut self, thread_id: u32) -> IncodeResult<ThreadInfo> {
+        debug!("Selecting thread: {}", thread_id);
+        
+        #[cfg(feature = "mock")]
+        {
+            debug!("Mock: Selecting thread {}", thread_id);
+            self.current_thread_id = Some(thread_id);
+            
+            // Return mock thread info
+            Ok(ThreadInfo {
+                thread_id,
+                index: 0,
+                name: Some(format!("thread_{}", thread_id)),
+                state: "selected".to_string(),
+                stop_reason: Some("user_selection".to_string()),
+                queue_name: Some("com.apple.main-thread".to_string()),
+                frame_count: 3,
+                current_frame: Some(StackFrame {
+                    index: 0,
+                    function_name: "selected_function".to_string(),
+                    file_path: Some("/path/to/selected.c".to_string()),
+                    line_number: Some(100),
+                    address: 0x100003000,
+                    is_inlined: false,
+                }),
+            })
+        }
+        
+        #[cfg(not(feature = "mock"))]
+        {
+            if let Some(process) = self.current_process {
+                let num_threads = unsafe { SBProcessGetNumThreads(process) };
+                
+                for i in 0..num_threads {
+                    let thread = unsafe { SBProcessGetThreadAtIndex(process, i) };
+                    if thread.is_null() {
+                        continue;
+                    }
+                    
+                    let tid = unsafe { SBThreadGetThreadID(thread) };
+                    if tid == thread_id {
+                        self.current_thread_id = Some(thread_id);
+                        self.current_thread = Some(thread);
+                        
+                        let index = unsafe { SBThreadGetIndexID(thread) };
+                        let state_str = self.get_thread_state_string(thread);
+                        let stop_reason = self.get_thread_stop_reason(thread);
+                        let queue_name = self.get_thread_queue_name(thread);
+                        let name = self.get_thread_name(thread);
+                        let frame_count = unsafe { SBThreadGetNumFrames(thread) };
+                        
+                        let current_frame = if frame_count > 0 {
+                            let frame = unsafe { SBThreadGetFrameAtIndex(thread, 0) };
+                            if !frame.is_null() {
+                                // TODO: Implement actual frame extraction
+                                Some(StackFrame {
+                                    index: 0,
+                                    function_name: "function".to_string(),
+                                    file_path: Some("/path/to/file".to_string()),
+                                    line_number: Some(1),
+                                    address: 0x100000000,
+                                    is_inlined: false,
+                                })
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        
+                        debug!("Selected thread {} (index {})", thread_id, index);
+                        return Ok(ThreadInfo {
+                            thread_id,
+                            index,
+                            name,
+                            state: state_str,
+                            stop_reason,
+                            queue_name,
+                            frame_count,
+                            current_frame,
+                        });
+                    }
+                }
+                
+                Err(IncodeError::process(format!("Thread {} not found", thread_id)))
+            } else {
+                Err(IncodeError::no_process())
+            }
+        }
     }
 
     /// Execute raw LLDB command
@@ -1708,6 +2599,31 @@ impl LldbManager {
         
         // TODO: Implement actual LLDB command execution
         Err(IncodeError::not_implemented("execute_command"))
+    }
+
+    // Helper methods for thread information extraction
+    #[cfg(not(feature = "mock"))]
+    fn get_thread_state_string(&self, _thread: *mut std::ffi::c_void) -> String {
+        // TODO: Implement actual thread state extraction
+        "unknown".to_string()
+    }
+
+    #[cfg(not(feature = "mock"))]
+    fn get_thread_stop_reason(&self, _thread: *mut std::ffi::c_void) -> Option<String> {
+        // TODO: Implement actual stop reason extraction
+        None
+    }
+
+    #[cfg(not(feature = "mock"))]
+    fn get_thread_queue_name(&self, _thread: *mut std::ffi::c_void) -> Option<String> {
+        // TODO: Implement actual queue name extraction
+        None
+    }
+
+    #[cfg(not(feature = "mock"))]
+    fn get_thread_name(&self, _thread: *mut std::ffi::c_void) -> Option<String> {
+        // TODO: Implement actual thread name extraction
+        None
     }
 
     /// List all processes on the system

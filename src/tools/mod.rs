@@ -11,8 +11,11 @@ pub mod breakpoints;
 pub mod stack_analysis;
 pub mod memory_inspection;
 pub mod variables;
+pub mod thread_management;
 pub mod threads;
+pub mod register_inspection;
 pub mod registers;
+pub mod debug_information;
 pub mod debug_info;
 pub mod target_info;
 pub mod lldb_control;
@@ -167,17 +170,30 @@ impl ToolRegistry {
     }
 
     fn register_thread_tools(&mut self) {
-        // TODO: Register actual tools when implemented
+        self.register_tool(Box::new(thread_management::ListThreadsTool));
+        self.register_tool(Box::new(thread_management::SelectThreadTool));
+        self.register_tool(Box::new(thread_management::GetThreadInfoTool));
+        self.register_tool(Box::new(thread_management::SuspendThreadTool));
+        self.register_tool(Box::new(thread_management::ResumeThreadTool));
+        // Keep placeholder for backward compatibility
         self.register_tool(Box::new(threads::PlaceholderTool));
     }
 
     fn register_register_tools(&mut self) {
-        // TODO: Register actual tools when implemented
+        self.register_tool(Box::new(register_inspection::GetRegistersTool));
+        self.register_tool(Box::new(register_inspection::SetRegisterTool));
+        self.register_tool(Box::new(register_inspection::GetRegisterInfoTool));
+        self.register_tool(Box::new(register_inspection::SaveRegisterStateTool));
+        // Keep placeholder for backward compatibility
         self.register_tool(Box::new(registers::PlaceholderTool));
     }
 
     fn register_debug_info_tools(&mut self) {
-        // TODO: Register actual tools when implemented
+        self.register_tool(Box::new(debug_information::GetSourceCodeTool));
+        self.register_tool(Box::new(debug_information::ListFunctionsTool));
+        self.register_tool(Box::new(debug_information::GetLineInfoTool));
+        self.register_tool(Box::new(debug_information::GetDebugInfoTool));
+        // Keep placeholder for backward compatibility
         self.register_tool(Box::new(debug_info::PlaceholderTool));
     }
 
