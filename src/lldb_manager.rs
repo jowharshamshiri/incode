@@ -14,7 +14,9 @@ pub struct ProcessInfo {
     pub memory_usage: Option<u64>,
 }
 
-// LLDB FFI bindings
+// LLDB FFI bindings - these will fail in test environment without LLDB
+// We'll handle this gracefully by using mock implementations for testing
+#[cfg(not(test))]
 extern "C" {
     fn SBDebuggerCreate() -> *mut std::ffi::c_void;
     fn SBDebuggerDestroy(debugger: *mut std::ffi::c_void);
@@ -29,6 +31,34 @@ extern "C" {
     fn SBProcessContinue(process: *mut std::ffi::c_void) -> bool;
     fn SBTargetGetProcess(target: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 }
+
+// Mock LLDB functions for testing environment
+#[cfg(test)]
+mod mock_lldb {
+    pub fn SBDebuggerCreate() -> *mut std::ffi::c_void {
+        0x1 as *mut std::ffi::c_void // Return non-null pointer for testing
+    }
+    pub fn SBDebuggerDestroy(_debugger: *mut std::ffi::c_void) {}
+    pub fn SBDebuggerSetAsync(_debugger: *mut std::ffi::c_void, _async_mode: bool) {}
+    pub fn SBDebuggerCreateTarget(_debugger: *mut std::ffi::c_void, _filename: *const i8) -> *mut std::ffi::c_void {
+        0x2 as *mut std::ffi::c_void
+    }
+    pub fn SBTargetLaunchSimple(_target: *mut std::ffi::c_void, _argv: *const *const i8, _envp: *const *const i8, _working_dir: *const i8) -> *mut std::ffi::c_void {
+        0x3 as *mut std::ffi::c_void
+    }
+    pub fn SBProcessGetProcessID(_process: *mut std::ffi::c_void) -> u64 { 12345 }
+    pub fn SBProcessGetState(_process: *mut std::ffi::c_void) -> u32 { 7 } // Running state
+    pub fn SBProcessAttachToProcessWithID(_target: *mut std::ffi::c_void, _listener: *mut std::ffi::c_void, pid: u64) -> *mut std::ffi::c_void {
+        if pid == 99999 { std::ptr::null_mut() } else { 0x4 as *mut std::ffi::c_void }
+    }
+    pub fn SBProcessDetach(_process: *mut std::ffi::c_void) -> bool { true }
+    pub fn SBProcessKill(_process: *mut std::ffi::c_void) -> bool { true }
+    pub fn SBProcessContinue(_process: *mut std::ffi::c_void) -> bool { true }
+    pub fn SBTargetGetProcess(_target: *mut std::ffi::c_void) -> *mut std::ffi::c_void { 0x5 as *mut std::ffi::c_void }
+}
+
+#[cfg(test)]
+use mock_lldb::*;
 
 /// Session information for debugging state
 #[derive(Debug, Clone)]
