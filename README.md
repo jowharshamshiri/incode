@@ -1,4 +1,4 @@
-# InLLDB - Intelligent LLDB Debugging Automation
+# InCode - Comprehensive LLDB Debugging Automation
 
 **Version**: 0.1.0  
 **Type**: MCP Server for AI-Powered LLDB Debugging  
@@ -6,9 +6,9 @@
 
 ## Overview
 
-InLLDB is a comprehensive Model Context Protocol (MCP) server that provides AI agents with complete LLDB debugging capabilities. Inspired by [insite's](https://github.com/jowharshamshiri/insite) comprehensive browser automation (52 tools across 13 categories), InLLDB delivers the same breadth of coverage for LLDB debugging automation.
+InCode is a comprehensive Model Context Protocol (MCP) server that provides AI agents with complete LLDB debugging capabilities. Inspired by [insite's](https://github.com/jowharshamshiri/insite) comprehensive browser automation (52 tools across 13 categories), InCode delivers the same breadth of coverage for LLDB debugging automation.
 
-Just as insite allows agents to see into browsers - taking screenshots, monitoring network activity, executing JavaScript - InLLDB allows agents to see into native binary execution via LLDB debugging with comprehensive process control, memory inspection, and program analysis.
+Just as insite allows agents to see into browsers - taking screenshots, monitoring network activity, executing JavaScript - InCode allows agents to see into native binary execution via LLDB debugging with comprehensive process control, memory inspection, and program analysis.
 
 ## Architecture
 
@@ -95,12 +95,12 @@ Just as insite allows agents to see into browsers - taking screenshots, monitori
 
 ```bash
 # Install directly from source
-git clone <repository-url>
-cd inlldb
+git clone https://github.com/jowharshamshiri/incode.git
+cd incode
 cargo build --release
 
 # Run the MCP server
-./target/release/inlldb
+./target/release/incode
 ```
 
 ### MCP Client Configuration
@@ -110,8 +110,8 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 ```json
 {
   "mcpServers": {
-    "inlldb": {
-      "command": "/path/to/inlldb/target/release/inlldb",
+    "incode": {
+      "command": "/path/to/incode/target/release/incode",
       "args": ["--debug"],
       "env": {
         "LLDB_PATH": "/usr/bin/lldb"
@@ -216,7 +216,7 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 
 ## Contributing
 
-InLLDB follows feature-centric development methodology:
+InCode follows feature-centric development methodology:
 
 1. All work organized around feature codes (F0001-F0065)
 2. Feature status tracked in `internal/features.md`
@@ -229,4 +229,4 @@ MIT License - See LICENSE file for details.
 
 ---
 
-**InLLDB: Bringing the power of expert-level LLDB debugging to AI agents**
+**InCode: Bringing the power of expert-level LLDB debugging to AI agents**
