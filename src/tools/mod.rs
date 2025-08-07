@@ -206,17 +206,24 @@ impl ToolRegistry {
     }
 
     fn register_lldb_control_tools(&mut self) {
-        // TODO: Register actual tools when implemented
-        self.register_tool(Box::new(lldb_control::PlaceholderTool));
+        self.register_tool(Box::new(lldb_control::ExecuteCommandTool));
+        self.register_tool(Box::new(lldb_control::GetLldbVersionTool));
+        self.register_tool(Box::new(lldb_control::SetLldbSettingsTool));
     }
 
     fn register_session_management_tools(&mut self) {
-        // TODO: Register actual tools when implemented
+        self.register_tool(Box::new(session_management::CreateSessionTool));
+        self.register_tool(Box::new(session_management::SaveSessionTool));
+        self.register_tool(Box::new(session_management::LoadSessionTool));
+        self.register_tool(Box::new(session_management::CleanupSessionTool));
+        // Keep placeholder for compatibility
         self.register_tool(Box::new(session_management::PlaceholderTool));
     }
 
     fn register_advanced_analysis_tools(&mut self) {
-        // TODO: Register actual tools when implemented  
+        self.register_tool(Box::new(advanced_analysis::AnalyzeCrashTool));
+        self.register_tool(Box::new(advanced_analysis::GenerateCoreDumpTool));
+        // Keep placeholder for compatibility
         self.register_tool(Box::new(advanced_analysis::PlaceholderTool));
     }
 }

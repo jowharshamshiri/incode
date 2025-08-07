@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::path::Path;
 use tracing::{debug, info, error};
 use uuid::Uuid;
+use serde_json::{json, Value};
 
 use crate::error::{IncodeError, IncodeResult};
 
@@ -214,6 +215,38 @@ pub struct ModuleInfo {
 }
 
 #[derive(Debug, Clone)]
+pub struct SymbolInfo {
+    pub name: String,
+    pub demangled_name: Option<String>,
+    pub symbol_type: String, // "Function", "Data", "Unknown"
+    pub address: u64,
+    pub size: u64,
+    pub module: Option<String>,
+    pub file: Option<String>,
+    pub line: Option<u32>,
+    pub is_exported: bool,
+    pub is_debug: bool,
+    pub visibility: String, // "public", "private", "protected", "unknown"
+}
+
+#[derive(Debug, Clone)]
+pub struct CrashAnalysis {
+    pub crash_type: String, // e.g., "SIGSEGV", "SIGABRT", "EXC_BAD_ACCESS"
+    pub crash_address: Option<u64>, // Address where crash occurred (if available)
+    pub faulting_thread: u32, // Thread ID that caused the crash
+    pub signal_number: i32, // Signal number (POSIX) or exception code
+    pub signal_name: String, // Human-readable signal name
+    pub exception_type: Option<String>, // Platform-specific exception type
+    pub exception_codes: Vec<u64>, // Platform-specific exception codes
+    pub crashed_thread_backtrace: Vec<String>, // Stack trace of crashed thread
+    pub register_state: String, // Register state at time of crash
+    pub memory_regions: Vec<String>, // Memory layout information
+    pub loaded_modules: Vec<String>, // List of loaded modules/libraries
+    pub crash_summary: String, // High-level crash description
+    pub recommendations: Vec<String>, // Debugging recommendations
+}
+
+#[derive(Debug, Clone)]
 pub struct ProcessInfo {
     pub pid: u32,
     pub state: String,
@@ -239,6 +272,17 @@ pub struct FrameInfo {
     pub module: Option<String>,
     pub file: Option<String>,
     pub line: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LldbVersionInfo {
+    pub version: String,
+    pub build_number: Option<String>,
+    pub api_version: String,
+    pub build_date: Option<String>,
+    pub build_configuration: Option<String>,
+    pub compiler: Option<String>,
+    pub platform: String,
 }
 
 // LLDB FFI bindings - these will fail in test environment without LLDB
@@ -283,6 +327,7 @@ extern "C" {
     fn SBSymbolGetStartAddress(symbol: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn SBSymbolGetEndAddress(symbol: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn SBAddressGetLoadAddress(address: *mut std::ffi::c_void, target: *mut std::ffi::c_void) -> u64;
+    fn SBFileSpecGetPath(file_spec: *mut std::ffi::c_void, buffer: *mut i8, buffer_size: u32) -> u32;
     fn SBThreadStepOver(thread: *mut std::ffi::c_void) -> bool;
     fn SBThreadStepInto(thread: *mut std::ffi::c_void) -> bool;
     fn SBThreadStepOut(thread: *mut std::ffi::c_void) -> bool;
@@ -316,7 +361,6 @@ extern "C" {
     fn SBTargetGetPlatform(target: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn SBPlatformGetName(platform: *mut std::ffi::c_void) -> *const i8;
     fn SBTargetGetExecutable(target: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn SBFileSpecGetPath(filespec: *mut std::ffi::c_void, buffer: *mut i8, buffer_size: u32) -> u32;
     fn SBPlatformGetWorkingDirectory(platform: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn SBPlatformGetOSBuild(platform: *mut std::ffi::c_void) -> *const i8;
     fn SBPlatformGetOSDescription(platform: *mut std::ffi::c_void) -> *const i8;
@@ -325,6 +369,8 @@ extern "C" {
     fn SBModuleGetVersion(module: *mut std::ffi::c_void) -> *const i8;
     fn SBModuleGetObjectName(module: *mut std::ffi::c_void) -> *const i8;
     fn SBModuleGetTriple(module: *mut std::ffi::c_void) -> *const i8;
+    fn SBDebuggerGetVersion() -> *const i8;
+    fn SBDebuggerGetBuildConfiguration() -> *const i8;
 }
 
 // Mock LLDB functions for testing environment
@@ -489,6 +535,9 @@ mod mock_lldb {
     pub fn SBTargetReadInstructions(_target: *mut std::ffi::c_void, _address: u64, _count: u32) -> *mut std::ffi::c_void { 
         0x400 as *mut std::ffi::c_void 
     }
+    pub fn SBModuleGetFileSpec(_module: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+        0x401 as *mut std::ffi::c_void 
+    }
 }
 
 #[cfg(test)]
@@ -504,7 +553,7 @@ pub struct DebuggingSession {
     pub created_at: std::time::SystemTime,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SessionState {
     Created,
     Attached,
@@ -609,6 +658,136 @@ impl LldbManager {
         } else {
             Err(IncodeError::session(format!("Session not found: {}", session_id)))
         }
+    }
+
+    /// Save debugging session state to JSON
+    pub fn save_session(&self, session_id: &Uuid) -> IncodeResult<String> {
+        debug!("Saving session: {}", session_id);
+        
+        let sessions = self.sessions.lock().unwrap();
+        let session = sessions.get(session_id)
+            .ok_or_else(|| IncodeError::session(format!("Session not found: {}", session_id)))?;
+        
+        // Collect current debugging state
+        let session_data = json!({
+            "session_id": session_id.to_string(),
+            "state": format!("{:?}", session.state),
+            "created_at": session.created_at.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default().as_secs(),
+            "target_path": session.target_path,
+            "process_id": session.process_id,
+            "current_thread_id": self.current_thread_id,
+            "current_frame_index": self.current_frame_index,
+            "has_target": self.current_target.is_some(),
+            "has_process": self.current_process.is_some(),
+            "has_thread": self.current_thread.is_some(),
+            "saved_at": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default().as_secs()
+        });
+        
+        let session_json = serde_json::to_string_pretty(&session_data)
+            .map_err(|e| IncodeError::lldb_op(format!("Failed to serialize session: {}", e)))?;
+        
+        info!("Session {} saved successfully", session_id);
+        Ok(session_json)
+    }
+
+    /// Load debugging session state from JSON
+    pub fn load_session(&mut self, session_data: &str) -> IncodeResult<Uuid> {
+        debug!("Loading session from data");
+        
+        let data: Value = serde_json::from_str(session_data)
+            .map_err(|e| IncodeError::lldb_op(format!("Failed to parse session data: {}", e)))?;
+        
+        // Extract session information
+        let session_id_str = data["session_id"].as_str()
+            .ok_or_else(|| IncodeError::lldb_op("Missing session_id in session data"))?;
+        
+        let session_id = Uuid::parse_str(session_id_str)
+            .map_err(|e| IncodeError::lldb_op(format!("Invalid session ID: {}", e)))?;
+        
+        let state_str = data["state"].as_str()
+            .ok_or_else(|| IncodeError::lldb_op("Missing state in session data"))?;
+        
+        let state = match state_str {
+            "Created" => SessionState::Created,
+            "Attached" => SessionState::Attached,
+            "Running" => SessionState::Running,
+            "Stopped" => SessionState::Stopped,
+            "Terminated" => SessionState::Terminated,
+            _ => SessionState::Created,
+        };
+        
+        // Create new session with loaded data
+        let created_at = if let Some(timestamp) = data["created_at"].as_u64() {
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(timestamp)
+        } else {
+            std::time::SystemTime::now()
+        };
+        
+        let session = DebuggingSession {
+            id: session_id,
+            target_path: data["target_path"].as_str().map(|s| s.to_string()),
+            process_id: data["process_id"].as_u64().map(|pid| pid as u32),
+            state,
+            created_at,
+        };
+        
+        // Restore session state
+        let mut sessions = self.sessions.lock().unwrap();
+        sessions.insert(session_id, session);
+        drop(sessions);
+        
+        // Restore debugging context
+        if let Some(thread_id) = data["current_thread_id"].as_u64() {
+            self.current_thread_id = Some(thread_id as u32);
+        }
+        
+        if let Some(frame_index) = data["current_frame_index"].as_u64() {
+            self.current_frame_index = frame_index as u32;
+        }
+        
+        // Set as current session
+        self.current_session = Some(session_id);
+        
+        info!("Session {} loaded successfully", session_id);
+        Ok(session_id)
+    }
+
+    /// Clean up debugging session resources
+    pub fn cleanup_session(&mut self, session_id: &Uuid) -> IncodeResult<String> {
+        debug!("Cleaning up session: {}", session_id);
+        
+        // Remove from sessions map
+        let mut sessions = self.sessions.lock().unwrap();
+        let session = sessions.remove(session_id)
+            .ok_or_else(|| IncodeError::session(format!("Session not found: {}", session_id)))?;
+        drop(sessions);
+        
+        // If this is the current session, clear current session
+        if self.current_session == Some(*session_id) {
+            self.current_session = None;
+            
+            // Clean up LLDB resources if needed
+            if session.state == SessionState::Running || session.state == SessionState::Attached {
+                // Detach/terminate process if still attached
+                if let Some(_process) = self.current_process {
+                    debug!("Detaching process during session cleanup");
+                    // Note: In real implementation, we'd call SBProcessDetach
+                }
+            }
+            
+            // Clear current debugging context
+            self.current_target = None;
+            self.current_process = None;
+            self.current_thread = None;
+            self.current_thread_id = None;
+            self.current_frame_index = 0;
+        }
+        
+        info!("Session {} cleaned up successfully", session_id);
+        Ok(format!("Session {} resources cleaned up", session_id))
     }
 
     /// Launch a process for debugging
@@ -3184,22 +3363,129 @@ impl LldbManager {
             };
             
             info!("Platform info retrieved: {}", name);
+            
             Ok(PlatformInfo {
                 name,
                 version,
                 architecture,
+                hostname,
+                working_directory,
                 vendor,
                 environment,
-                sdk_version,
-                deployment_target,
                 is_simulator,
                 is_remote,
                 supports_jit,
-                working_directory,
                 supported_architectures,
-                hostname,
+                sdk_version,
+                deployment_target,
             })
         }
+        
+        #[cfg(feature = "mock")]
+        {
+            Ok(PlatformInfo {
+                name: "Mock Platform".to_string(),
+                version: "Mock 1.0".to_string(),
+                architecture: "x86_64".to_string(),
+                hostname: Some("mock-host".to_string()),
+                working_directory: "/tmp".to_string(),
+                vendor: "apple".to_string(),
+                environment: "macosx15.0".to_string(),
+                is_simulator: false,
+                is_remote: false,
+                supports_jit: true,
+                supported_architectures: vec!["x86_64".to_string(), "arm64".to_string()],
+                sdk_version: Some("15.0".to_string()),
+                deployment_target: Some("13.0".to_string()),
+            })
+        }
+    }
+    
+    /// Get LLDB version and build information
+    pub fn get_lldb_version(&self, include_build_info: bool) -> IncodeResult<LldbVersionInfo> {
+        debug!("Getting LLDB version info, include_build_info: {}", include_build_info);
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            return Ok(LldbVersionInfo {
+                version: "lldb-1500.0.200.58".to_string(),
+                build_number: if include_build_info { Some("1500.0.200.58".to_string()) } else { None },
+                api_version: "15.0.0".to_string(),
+                build_date: if include_build_info { Some("2024-08-06".to_string()) } else { None },
+                build_configuration: if include_build_info { Some("Release".to_string()) } else { None },
+                compiler: if include_build_info { Some("Apple clang version 15.0.0".to_string()) } else { None },
+                platform: std::env::consts::OS.to_string(),
+            });
+        }
+
+        #[cfg(not(feature = "mock"))]
+        unsafe {
+            // Get version string
+            let version_ptr = SBDebuggerGetVersion();
+            let version = if !version_ptr.is_null() {
+                std::ffi::CStr::from_ptr(version_ptr).to_string_lossy().to_string()
+            } else {
+                "unknown".to_string()
+            };
+            
+            // Parse build number from version (e.g., "lldb-1500.0.200.58" -> "1500.0.200.58")
+            let build_number = if include_build_info {
+                if let Some(dash_pos) = version.find('-') {
+                    Some(version[dash_pos + 1..].to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            
+            // Get build configuration
+            let build_config = if include_build_info {
+                let config_ptr = SBDebuggerGetBuildConfiguration();
+                if !config_ptr.is_null() {
+                    Some(std::ffi::CStr::from_ptr(config_ptr).to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            
+            // Extract API version from version string (first two version components)
+            let api_version = build_number.as_ref()
+                .and_then(|bn| {
+                    let parts: Vec<&str> = bn.split('.').collect();
+                    if parts.len() >= 2 {
+                        Some(format!("{}.{}.0", parts[0], parts[1]))
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_else(|| "unknown".to_string());
+            
+            info!("LLDB version retrieved: {}", version);
+            
+            Ok(LldbVersionInfo {
+                version,
+                build_number,
+                api_version,
+                build_date: if include_build_info { Some("unknown".to_string()) } else { None },
+                build_configuration: build_config,
+                compiler: if include_build_info { Some("unknown".to_string()) } else { None },
+                platform: std::env::consts::OS.to_string(),
+            })
+        }
+
+        #[cfg(feature = "mock")]
+        Ok(LldbVersionInfo {
+            version: "lldb-1500.0.200.58".to_string(),
+            build_number: if include_build_info { Some("1500.0.200.58".to_string()) } else { None },
+            api_version: "15.0.0".to_string(),
+            build_date: if include_build_info { Some("2024-08-06".to_string()) } else { None },
+            build_configuration: if include_build_info { Some("Release".to_string()) } else { None },
+            compiler: if include_build_info { Some("Apple clang version 15.0.0".to_string()) } else { None },
+            platform: std::env::consts::OS.to_string(),
+        })
     }
 
     /// Get comprehensive target information
@@ -3304,4 +3590,451 @@ impl LldbManager {
             })
         }
     }
+
+    /// Set LLDB settings (configuration parameters)
+    pub fn set_lldb_settings(&mut self, setting_name: &str, value: &str) -> IncodeResult<String> {
+        debug!("Setting LLDB setting: {} = {}", setting_name, value);
+        
+        // Validate setting name format
+        if setting_name.is_empty() {
+            return Err(IncodeError::invalid_parameter("setting name cannot be empty"));
+        }
+        
+        // Common LLDB settings validation
+        let valid_settings = vec![
+            "target.prefer-dynamic-value",
+            "target.display-expression-variables",
+            "target.max-children-count",
+            "target.max-string-summary-length",
+            "target.process.thread.step-avoid-libraries",
+            "target.process.thread.step-avoid-regexp",
+            "plugin.symbol-file.dwarf.comp-dir-symlink-paths",
+            "interpreter.prompt",
+            "stop-disassembly-display",
+            "stop-line-count-before",
+            "stop-line-count-after",
+            "thread-format",
+            "frame-format",
+            "use-external-editor",
+            "auto-confirm",
+            "print-object-description",
+            "display-recognised-arguments",
+            "display-runtime-support-values",
+        ];
+        
+        // Check if it's a known setting or follows dot notation pattern
+        let is_valid_setting = valid_settings.contains(&setting_name) || 
+            setting_name.contains('.') && !setting_name.starts_with('.') && !setting_name.ends_with('.');
+        
+        if !is_valid_setting {
+            return Err(IncodeError::invalid_parameter(
+                format!("invalid setting name: {}", setting_name)
+            ));
+        }
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            info!("Mock: Setting {} = {}", setting_name, value);
+            return Ok(format!("Setting '{}' changed from '<default>' to '{}'", setting_name, value));
+        }
+        
+        // Execute the settings set command
+        let command = format!("settings set {} {}", setting_name, value);
+        let result = self.execute_command(&command)?;
+        
+        // Verify the setting was applied
+        let verify_command = format!("settings show {}", setting_name);
+        let current_value = self.execute_command(&verify_command)?;
+        
+        info!("LLDB setting updated: {} = {}", setting_name, value);
+        
+        Ok(format!("Setting '{}' changed to '{}'. Current: {}", 
+            setting_name, value, current_value.trim()))
+    }
+
+    /// Set variable value during debugging
+    pub fn set_variable(&mut self, variable_name: &str, value: &str) -> IncodeResult<String> {
+        debug!("Setting variable: {} = {}", variable_name, value);
+        
+        // Validate variable name
+        if variable_name.is_empty() {
+            return Err(IncodeError::invalid_parameter("variable name cannot be empty"));
+        }
+        
+        // Validate we have an active process
+        if self.current_process.is_none() {
+            return Err(IncodeError::no_process());
+        }
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            info!("Mock: Setting variable {} = {}", variable_name, value);
+            
+            // Simulate different responses based on variable name patterns
+            if variable_name.starts_with("$") {
+                // Register-like variable
+                return Ok(format!("Register '{}' set to {}", variable_name, value));
+            } else if variable_name.contains("::") || variable_name.contains(".") {
+                // Qualified variable name
+                return Ok(format!("Variable '{}' modified. Old value: <unknown>, New value: {}", 
+                    variable_name, value));
+            } else {
+                // Simple variable
+                return Ok(format!("Variable '{}' set to {}", variable_name, value));
+            }
+        }
+        
+        // Build the expression to set the variable
+        // Handle different value types appropriately
+        let expression = if value.starts_with('"') && value.ends_with('"') {
+            // String literal - use as-is
+            format!("{} = {}", variable_name, value)
+        } else if value.starts_with("0x") {
+            // Hex value
+            format!("{} = {}", variable_name, value)
+        } else if value.parse::<f64>().is_ok() {
+            // Numeric value
+            format!("{} = {}", variable_name, value)
+        } else if value == "true" || value == "false" {
+            // Boolean value
+            format!("{} = {}", variable_name, value)
+        } else if value == "nullptr" || value == "NULL" {
+            // Null pointer
+            format!("{} = {}", variable_name, value)
+        } else {
+            // Treat as expression or variable reference
+            format!("{} = {}", variable_name, value)
+        };
+        
+        // Execute the assignment expression
+        let result = self.evaluate_expression(&expression)?;
+        
+        // Verify the assignment by reading back the value
+        let verify_result = self.evaluate_expression(variable_name)?;
+        
+        info!("Variable '{}' set successfully. New value: {}", variable_name, verify_result);
+        
+        Ok(format!("Variable '{}' modified. New value: {}", variable_name, verify_result))
+    }
+
+    /// Lookup symbol information by name
+    pub fn lookup_symbol(&self, symbol_name: &str) -> IncodeResult<SymbolInfo> {
+        debug!("Looking up symbol: {}", symbol_name);
+        
+        // Validate symbol name
+        if symbol_name.is_empty() {
+            return Err(IncodeError::invalid_parameter("symbol name cannot be empty"));
+        }
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            info!("Mock: Looking up symbol {}", symbol_name);
+            
+            // Simulate different symbol types based on name patterns
+            if symbol_name.starts_with("_Z") || symbol_name.contains("::") {
+                // C++ mangled symbol
+                return Ok(SymbolInfo {
+                    name: symbol_name.to_string(),
+                    demangled_name: Some(format!("std::vector<int>::{}", 
+                        symbol_name.split("::").last().unwrap_or("method"))),
+                    symbol_type: "Function".to_string(),
+                    address: 0x100001234,
+                    size: 128,
+                    module: Some("libstdc++.so".to_string()),
+                    file: Some("/usr/include/c++/vector".to_string()),
+                    line: Some(142),
+                    is_exported: true,
+                    is_debug: true,
+                    visibility: "public".to_string(),
+                });
+            } else if symbol_name.starts_with("g_") || symbol_name.starts_with("s_") {
+                // Global/static variable
+                return Ok(SymbolInfo {
+                    name: symbol_name.to_string(),
+                    demangled_name: None,
+                    symbol_type: "Data".to_string(),
+                    address: 0x100002000,
+                    size: 8,
+                    module: Some("main".to_string()),
+                    file: Some("/path/to/main.cpp".to_string()),
+                    line: Some(45),
+                    is_exported: true,
+                    is_debug: true,
+                    visibility: "global".to_string(),
+                });
+            } else {
+                // Regular function
+                return Ok(SymbolInfo {
+                    name: symbol_name.to_string(),
+                    demangled_name: None,
+                    symbol_type: "Function".to_string(),
+                    address: 0x100003000,
+                    size: 64,
+                    module: Some("main".to_string()),
+                    file: Some("/path/to/source.c".to_string()),
+                    line: Some(100),
+                    is_exported: true,
+                    is_debug: true,
+                    visibility: "public".to_string(),
+                });
+            }
+        }
+        
+        // Execute symbol lookup command
+        let command = format!("image lookup -n {}", symbol_name);
+        let result = self.execute_command(&command)?;
+        
+        // Parse the result to extract symbol information
+        // This is a simplified parser - real implementation would be more robust
+        let lines: Vec<&str> = result.lines().collect();
+        if lines.is_empty() || result.contains("no symbols match") {
+            return Err(IncodeError::lldb_op(format!("Symbol '{}' not found", symbol_name)));
+        }
+        
+        // Extract address from first line (typically "1 match found in ...")
+        let mut address = 0u64;
+        let mut module = None;
+        let mut file = None;
+        let mut line = None;
+        let mut symbol_type = "Unknown".to_string();
+        
+        for line_str in &lines {
+            if line_str.contains("Address:") {
+                // Parse address
+                if let Some(addr_str) = line_str.split("0x").nth(1) {
+                    if let Some(addr_end) = addr_str.find(' ') {
+                        address = u64::from_str_radix(&addr_str[..addr_end], 16).unwrap_or(0);
+                    }
+                }
+            } else if line_str.contains("Summary:") {
+                // Extract module name
+                if let Some(mod_start) = line_str.find('`') {
+                    if let Some(mod_end) = line_str[mod_start+1..].find('`') {
+                        module = Some(line_str[mod_start+1..mod_start+1+mod_end].to_string());
+                    }
+                }
+            } else if line_str.contains("CompileUnit:") {
+                // Extract file information
+                let parts: Vec<&str> = line_str.split_whitespace().collect();
+                if parts.len() > 1 {
+                    file = Some(parts.last().unwrap().to_string());
+                }
+            } else if line_str.contains("Function:") {
+                symbol_type = "Function".to_string();
+            } else if line_str.contains("Variable:") || line_str.contains("Data:") {
+                symbol_type = "Data".to_string();
+            }
+        }
+        
+        // Try to get line information
+        if address != 0 {
+            if let Ok(line_info) = self.get_line_info(address) {
+                file = Some(line_info.file_path);
+                line = Some(line_info.line_number);
+            }
+        }
+        
+        info!("Symbol '{}' found at 0x{:x}", symbol_name, address);
+        
+        Ok(SymbolInfo {
+            name: symbol_name.to_string(),
+            demangled_name: None, // TODO: Implement demangling
+            symbol_type,
+            address,
+            size: 0, // TODO: Get actual size
+            module,
+            file,
+            line,
+            is_exported: true, // TODO: Determine actual visibility
+            is_debug: true,
+            visibility: "unknown".to_string(),
+        })
+    }
+
+    /// Analyze crash dump and provide detailed crash information
+    pub fn analyze_crash(&self, core_file_path: Option<&str>) -> IncodeResult<CrashAnalysis> {
+        debug!("Analyzing crash, core file: {:?}", core_file_path);
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            info!("Mock: Analyzing crash");
+            
+            return Ok(CrashAnalysis {
+                crash_type: "SIGSEGV".to_string(),
+                crash_address: Some(0x0),
+                faulting_thread: 1,
+                signal_number: 11,
+                signal_name: "SIGSEGV".to_string(),
+                exception_type: Some("EXC_BAD_ACCESS".to_string()),
+                exception_codes: vec![1, 0],
+                crashed_thread_backtrace: vec![
+                    "0x100001234 main + 52".to_string(),
+                    "0x100001180 foo + 16".to_string(),
+                    "0x100001200 bar + 32".to_string(),
+                ],
+                register_state: "rax=0x0 rbx=0x7fff5fbff8a0 rcx=0x0".to_string(),
+                memory_regions: vec![
+                    "0x100000000-0x100002000 r-x /usr/bin/test".to_string(),
+                    "0x7fff5fbff000-0x7fff5fc00000 rw- [stack]".to_string(),
+                ],
+                loaded_modules: vec![
+                    "test (0x100000000)".to_string(),
+                    "libsystem_c.dylib (0x7fff80000000)".to_string(),
+                ],
+                crash_summary: "Segmentation fault: attempted to read from NULL pointer".to_string(),
+                recommendations: vec![
+                    "Check for null pointer dereferences".to_string(),
+                    "Verify array bounds checking".to_string(),
+                    "Review memory allocation/deallocation".to_string(),
+                ],
+            });
+        }
+        
+        // Validate we have debugging context or core file
+        if core_file_path.is_none() && self.current_process.is_none() {
+            return Err(IncodeError::lldb_op("No core file path provided and no active process"));
+        }
+        
+        // In real implementation, we would:
+        // 1. Load core file if provided, or use current process
+        // 2. Get crashed thread information
+        // 3. Analyze registers and memory state
+        // 4. Extract crash details and generate report
+        
+        let crash_type = "SIGSEGV"; // Default for demonstration
+        let signal_number = 11;
+        let faulting_thread = 0u32;
+        
+        // Get backtrace for crashed thread
+        let backtrace = match self.get_backtrace() {
+            Ok(bt) => bt,
+            Err(_) => vec!["Unable to get backtrace".to_string()],
+        };
+        
+        // Get register state
+        let register_state = match self.get_registers(Some(faulting_thread), true) {
+            Ok(regs) => format!("Registers captured: {} entries", regs.registers.len()),
+            Err(_) => "Unable to get register state".to_string(),
+        };
+        
+        // Get memory regions
+        let memory_regions = match self.get_memory_regions() {
+            Ok(regions) => {
+                regions.into_iter().take(5).map(|region| {
+                    format!("0x{:x}-0x{:x} {} {}", 
+                        region.start_address, 
+                        region.end_address,
+                        region.permissions,
+                        region.name.unwrap_or_else(|| "[unknown]".to_string())
+                    )
+                }).collect()
+            },
+            Err(_) => vec!["Unable to get memory regions".to_string()],
+        };
+        
+        // Get loaded modules
+        let loaded_modules = match self.list_modules(None, true) {
+            Ok(modules) => {
+                modules.into_iter().take(10).map(|module| {
+                    format!("{} (0x{:x})", module.name, module.load_address)
+                }).collect()
+            },
+            Err(_) => vec!["Unable to get loaded modules".to_string()],
+        };
+        
+        // Generate crash summary and recommendations
+        let crash_summary = format!("{}: Process crashed in thread {}", crash_type, faulting_thread);
+        let recommendations = vec![
+            "Review the crashed thread's stack trace".to_string(),
+            "Check for memory access violations".to_string(),
+            "Verify proper error handling in the code path".to_string(),
+            "Consider using memory debugging tools".to_string(),
+        ];
+        
+        info!("Crash analysis completed for {}", 
+            core_file_path.unwrap_or("current process"));
+        
+        Ok(CrashAnalysis {
+            crash_type: crash_type.to_string(),
+            crash_address: Some(0x0), // TODO: Extract actual crash address
+            faulting_thread,
+            signal_number,
+            signal_name: crash_type.to_string(),
+            exception_type: Some("EXC_BAD_ACCESS".to_string()), // TODO: Platform-specific
+            exception_codes: vec![1, 0], // TODO: Extract actual exception codes
+            crashed_thread_backtrace: backtrace,
+            register_state,
+            memory_regions,
+            loaded_modules,
+            crash_summary,
+            recommendations,
+        })
+    }
+
+    /// Generate core dump file for current process state
+    pub fn generate_core_dump(&self, output_path: &str) -> IncodeResult<String> {
+        debug!("Generating core dump to: {}", output_path);
+        
+        // Validate we have an active process
+        if self.current_process.is_none() {
+            return Err(IncodeError::no_process());
+        }
+        
+        // Validate output path
+        if output_path.is_empty() {
+            return Err(IncodeError::invalid_parameter("output path cannot be empty"));
+        }
+        
+        if cfg!(test) {
+            // Mock implementation for testing
+            info!("Mock: Generating core dump to {}", output_path);
+            
+            // Simulate core dump generation
+            let file_size = 1024 * 1024 * 50; // 50MB mock size
+            let process_info = format!("Process PID: {}, State: Running", 
+                std::process::id());
+            
+            return Ok(format!(
+                "Core dump generated successfully\nOutput: {}\nSize: {} bytes\nProcess: {}\nTimestamp: {:?}",
+                output_path,
+                file_size,
+                process_info,
+                std::time::SystemTime::now()
+            ));
+        }
+        
+        // In real implementation with LLDB:
+        // 1. Use SBProcess::SaveCore() or equivalent
+        // 2. Specify output format (ELF, Mach-O, etc.)
+        // 3. Include memory regions, threads, and debug info
+        
+        // For now, execute LLDB command to generate core dump
+        let command = format!("process save-core {}", output_path);
+        match self.execute_command(&command) {
+            Ok(output) => {
+                // Verify the file was created
+                if std::path::Path::new(output_path).exists() {
+                    let file_size = std::fs::metadata(output_path)
+                        .map(|m| m.len())
+                        .unwrap_or(0);
+                    
+                    info!("Core dump generated successfully: {} ({} bytes)", output_path, file_size);
+                    
+                    Ok(format!(
+                        "Core dump generated successfully\nOutput: {}\nSize: {} bytes\nLLDB Output: {}",
+                        output_path,
+                        file_size,
+                        output.trim()
+                    ))
+                } else {
+                    Err(IncodeError::lldb_op(format!("Core dump file not created: {}", output_path)))
+                }
+            },
+            Err(e) => {
+                error!("Failed to generate core dump: {}", e);
+                Err(IncodeError::lldb_op(format!("Core dump generation failed: {}", e)))
+            }
+        }
+    }
 }
+

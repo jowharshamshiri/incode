@@ -35,7 +35,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 # UUID for session management
-uuid = { version = "1.0", features = ["v4"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Cross-platform process management
 libc = "0.2"

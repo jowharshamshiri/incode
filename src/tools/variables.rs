@@ -527,23 +527,109 @@ impl Tool for GetVariableInfoTool {
     }
 }
 
-// Placeholder implementations for remaining tools
-macro_rules! impl_placeholder_tool {
-    ($tool:ident, $name:expr, $desc:expr) => {
-        #[async_trait]
-        impl Tool for $tool {
-            fn name(&self) -> &'static str { $name }
-            fn description(&self) -> &'static str { $desc }
-            fn parameters(&self) -> Value { json!({}) }
-            async fn execute(&self, _: HashMap<String, Value>, _: &mut LldbManager) -> IncodeResult<ToolResponse> {
-                Ok(ToolResponse::Error("Not yet implemented".to_string()))
-            }
-        }
-    };
+/// Modify variable value during debugging
+#[async_trait]
+impl Tool for SetVariableTool {
+    fn name(&self) -> &'static str {
+        "set_variable"
+    }
+
+    fn description(&self) -> &'static str {
+        "Modify variable value during debugging"
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "variable_name": {
+                    "type": "string",
+                    "description": "Name of the variable to modify (can be simple or qualified name)"
+                },
+                "value": {
+                    "type": "string",
+                    "description": "New value to set (string literals should include quotes, e.g., \"hello\")"
+                }
+            },
+            "required": ["variable_name", "value"]
+        })
+    }
+
+    async fn execute(
+        &self,
+        arguments: HashMap<String, Value>,
+        lldb_manager: &mut LldbManager,
+    ) -> IncodeResult<ToolResponse> {
+        let variable_name = arguments.get("variable_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| IncodeError::invalid_parameter("variable_name required"))?;
+
+        let value = arguments.get("value")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| IncodeError::invalid_parameter("value required"))?;
+
+        let result = lldb_manager.set_variable(variable_name, value)?;
+
+        Ok(ToolResponse::Success(json!({
+            "variable_name": variable_name,
+            "value": value,
+            "result": result,
+            "status": "modified"
+        }).to_string()))
+    }
 }
 
-impl_placeholder_tool!(SetVariableTool, "set_variable", "Modify variable value during debugging");
-impl_placeholder_tool!(LookupSymbolTool, "lookup_symbol", "Find symbol information by name");
+/// Find symbol information by name
+#[async_trait]
+impl Tool for LookupSymbolTool {
+    fn name(&self) -> &'static str {
+        "lookup_symbol"
+    }
+
+    fn description(&self) -> &'static str {
+        "Find symbol information by name"
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "symbol_name": {
+                    "type": "string",
+                    "description": "Name of the symbol to lookup (function, variable, or type)"
+                }
+            },
+            "required": ["symbol_name"]
+        })
+    }
+
+    async fn execute(
+        &self,
+        arguments: HashMap<String, Value>,
+        lldb_manager: &mut LldbManager,
+    ) -> IncodeResult<ToolResponse> {
+        let symbol_name = arguments.get("symbol_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| IncodeError::invalid_parameter("symbol_name required"))?;
+
+        let symbol_info = lldb_manager.lookup_symbol(symbol_name)?;
+
+        Ok(ToolResponse::Success(json!({
+            "symbol_name": symbol_info.name,
+            "demangled_name": symbol_info.demangled_name,
+            "symbol_type": symbol_info.symbol_type,
+            "address": format!("0x{:x}", symbol_info.address),
+            "size": symbol_info.size,
+            "module": symbol_info.module,
+            "file": symbol_info.file,
+            "line": symbol_info.line,
+            "is_exported": symbol_info.is_exported,
+            "is_debug": symbol_info.is_debug,
+            "visibility": symbol_info.visibility,
+            "status": "found"
+        }).to_string()))
+    }
+}
 
 // Keep the old PlaceholderTool for compatibility with tool registry
 pub struct PlaceholderTool;
