@@ -21,6 +21,23 @@ use test_setup::{TestSession, TestMode, TestUtils};
 use incode::lldb_manager::LldbManager;
 use incode::error::{IncodeError, IncodeResult};
 
+// Helper function to decode hex strings
+fn hex_decode(hex_str: &str) -> Result<Vec<u8>, &'static str> {
+    if hex_str.len() % 2 != 0 {
+        return Err("Hex string must have even length");
+    }
+    
+    let mut result = Vec::new();
+    for i in (0..hex_str.len()).step_by(2) {
+        let hex_pair = &hex_str[i..i+2];
+        match u8::from_str_radix(hex_pair, 16) {
+            Ok(byte) => result.push(byte),
+            Err(_) => return Err("Invalid hex character"),
+        }
+    }
+    Ok(result)
+}
+
 #[tokio::test]
 async fn test_f0028_read_memory_success() {
     // F0028: read_memory - Test reading raw memory with different formats
@@ -39,7 +56,7 @@ async fn test_f0028_read_memory_success() {
             println!("✅ F0028: Test session started with PID {}", pid);
             
             // Set breakpoint to get to memory scenario
-            let _ = session.lldb_manager().set_breakpoint("create_global_patterns", None);
+            let _ = session.lldb_manager().set_breakpoint("create_global_patterns");
             let _ = session.lldb_manager().continue_execution();
             
             // Test reading memory - use a known global variable address
@@ -47,21 +64,15 @@ async fn test_f0028_read_memory_success() {
             let test_formats = vec!["hex", "ascii", "bytes", "int", "float", "pointer"];
             
             for format in test_formats {
-                let result = session.lldb_manager().read_memory(0x100000000, 64, format);
+                let result = session.lldb_manager().read_memory(0x100000000, 64);
                 
                 match result {
                     Ok(memory_data) => {
                         println!("✅ F0028: read_memory succeeded with format {}", format);
-                        println!("  Address: 0x{:x}", memory_data.address);
-                        println!("  Size: {}", memory_data.size);
-                        println!("  Format: {}", memory_data.format);
-                        println!("  Content preview: {}...", 
-                               memory_data.content.chars().take(50).collect::<String>());
+                        println!("  Memory data size: {}", memory_data.len());
+                        println!("  Content (first 20 bytes): {:?}", &memory_data[..20.min(memory_data.len())]);
                         
-                        assert_eq!(memory_data.address, 0x100000000);
-                        assert_eq!(memory_data.size, 64);
-                        assert_eq!(memory_data.format, format);
-                        assert!(!memory_data.content.is_empty());
+                        assert_eq!(memory_data.len(), 64);
                     }
                     Err(e) => {
                         println!("⚠️ F0028: read_memory failed for format {}: {}", format, e);
@@ -93,7 +104,7 @@ async fn test_f0028_read_memory_invalid_address() {
     match session.start() {
         Ok(_pid) => {
             // Test reading from invalid address
-            let result = session.lldb_manager().read_memory(0x0, 64, "hex");
+            let result = session.lldb_manager().read_memory(0x0, 64);
             
             match result {
                 Err(e) => {
@@ -130,7 +141,7 @@ async fn test_f0029_write_memory() {
             println!("✅ F0029: Test session started with PID {}", pid);
             
             // Set breakpoint to get to memory scenario
-            let _ = session.lldb_manager().set_breakpoint("create_heap_patterns", None);
+            let _ = session.lldb_manager().set_breakpoint("create_heap_patterns");
             let _ = session.lldb_manager().continue_execution();
             
             // Test writing memory with different formats
@@ -141,14 +152,26 @@ async fn test_f0029_write_memory() {
             ];
             
             for (format, data) in test_data {
-                let result = session.lldb_manager().write_memory(0x100000000, data, format);
+                let data_bytes = match format {
+                    "hex" => hex_decode(data).unwrap_or_else(|_| data.as_bytes().to_vec()),
+                    "ascii" => data.as_bytes().to_vec(),
+                    "bytes" => {
+                        // Parse "0x54,0x45,0x53,0x54" format
+                        data.split(',')
+                            .map(|s| u8::from_str_radix(s.trim().trim_start_matches("0x"), 16)
+                                .unwrap_or(0))
+                            .collect()
+                    }
+                    _ => data.as_bytes().to_vec(),
+                };
+                let result = session.lldb_manager().write_memory(0x100000000, &data_bytes);
                 
                 match result {
-                    Ok(success) => {
-                        if success {
-                            println!("✅ F0029: write_memory succeeded with format {}", format);
+                    Ok(bytes_written) => {
+                        if bytes_written > 0 {
+                            println!("✅ F0029: write_memory succeeded with format {}, wrote {} bytes", format, bytes_written);
                         } else {
-                            println!("⚠️ F0029: write_memory reported failure for format {}", format);
+                            println!("⚠️ F0029: write_memory reported failure for format {} (0 bytes written)", format);
                         }
                     }
                     Err(e) => {
@@ -183,23 +206,19 @@ async fn test_f0030_disassemble_function() {
             println!("✅ F0030: Test session started with PID {}", pid);
             
             // Test disassembling main function
-            let result = session.lldb_manager().disassemble("main", 10);
+            let result = session.lldb_manager().disassemble(0x100000000, 10);
             
             match result {
-                Ok(disassembly) => {
+                Ok(instructions) => {
                     println!("✅ F0030: disassemble succeeded");
-                    println!("  Function: {}", disassembly.function);
-                    println!("  Start Address: 0x{:x}", disassembly.start_address);
-                    println!("  Instruction Count: {}", disassembly.instructions.len());
+                    println!("  Instruction Count: {}", instructions.len());
                     
-                    for (i, instruction) in disassembly.instructions.iter().take(3).enumerate() {
-                        println!("  Instruction {}: 0x{:x}: {} {}", 
-                               i + 1, instruction.address, instruction.mnemonic, instruction.operands);
+                    for (i, instruction) in instructions.iter().take(3).enumerate() {
+                        println!("  Instruction {}: {}", i + 1, instruction);
                     }
                     
-                    assert_eq!(disassembly.function, "main");
-                    assert!(disassembly.start_address > 0);
-                    assert!(!disassembly.instructions.is_empty());
+                    assert!(!instructions.is_empty());
+                    assert_eq!(instructions.len(), 10);
                 }
                 Err(e) => {
                     println!("⚠️ F0030: disassemble failed: {}", e);
@@ -229,7 +248,7 @@ async fn test_f0030_disassemble_invalid_function() {
     
     match session.start() {
         Ok(_pid) => {
-            let result = session.lldb_manager().disassemble("nonexistent_function_12345", 10);
+            let result = session.lldb_manager().disassemble(0x0, 10);
             
             match result {
                 Err(e) => {
@@ -266,7 +285,7 @@ async fn test_f0031_search_memory() {
             println!("✅ F0031: Test session started with PID {}", pid);
             
             // Set breakpoint to get to memory scenario
-            let _ = session.lldb_manager().set_breakpoint("create_global_patterns", None);
+            let _ = session.lldb_manager().set_breakpoint("create_global_patterns");
             let _ = session.lldb_manager().continue_execution();
             
             // Test searching for different patterns
@@ -277,11 +296,32 @@ async fn test_f0031_search_memory() {
             ];
             
             for (format, pattern) in search_patterns {
+                let pattern_bytes = match format {
+                    "hex" => {
+                        let mut bytes = Vec::new();
+                        for chunk in pattern.as_bytes().chunks(2) {
+                            if let Ok(byte_val) = u8::from_str_radix(
+                                &String::from_utf8_lossy(chunk), 16
+                            ) {
+                                bytes.push(byte_val);
+                            }
+                        }
+                        bytes
+                    }
+                    "ascii" => pattern.as_bytes().to_vec(),
+                    "bytes" => {
+                        // Parse "0x00,0x01" format
+                        pattern.split(',')
+                            .map(|s| u8::from_str_radix(s.trim().trim_start_matches("0x"), 16)
+                                .unwrap_or(0))
+                            .collect()
+                    }
+                    _ => pattern.as_bytes().to_vec(),
+                };
                 let result = session.lldb_manager().search_memory(
-                    pattern, 
-                    format, 
-                    0x100000000, 
-                    0x10000
+                    &pattern_bytes,
+                    Some(0x100000000),
+                    Some(0x10000)
                 );
                 
                 match result {
@@ -289,10 +329,8 @@ async fn test_f0031_search_memory() {
                         println!("✅ F0031: search_memory succeeded for {} pattern, found {} matches", 
                                format, matches.len());
                         
-                        for (i, match_result) in matches.iter().take(3).enumerate() {
-                            println!("  Match {}: Address 0x{:x}, Context: {}", 
-                                   i + 1, match_result.address, 
-                                   match_result.context.chars().take(30).collect::<String>());
+                        for (i, address) in matches.iter().take(3).enumerate() {
+                            println!("  Match {}: Address 0x{:x}", i + 1, address);
                         }
                     }
                     Err(e) => {
@@ -336,7 +374,7 @@ async fn test_f0032_get_memory_regions() {
                     for (i, region) in regions.iter().take(5).enumerate() {
                         println!("  Region {}: 0x{:x}-0x{:x} ({}) [{}]", 
                                i + 1, region.start_address, region.end_address,
-                               region.name, region.permissions);
+                               region.name.as_ref().unwrap_or(&"unknown".to_string()), region.permissions);
                     }
                     
                     assert!(regions.len() > 0, "Should have at least one memory region");
@@ -385,24 +423,23 @@ async fn test_f0033_dump_memory() {
             
             for format in dump_formats {
                 let output_file = format!("/tmp/memory_dump_{}.txt", format);
-                let result = session.lldb_manager().dump_memory(
+                let result = session.lldb_manager().dump_memory_to_file(
                     0x100000000, 
                     256, 
-                    &output_file, 
-                    format
+                    &output_file
                 );
                 
                 match result {
-                    Ok(success) => {
-                        if success {
-                            println!("✅ F0033: dump_memory succeeded with format {} to {}", format, output_file);
+                    Ok(bytes_written) => {
+                        if bytes_written > 0 {
+                            println!("✅ F0033: dump_memory_to_file succeeded with format {} to {}, wrote {} bytes", format, output_file, bytes_written);
                             
                             // Check if file was created
                             if std::path::Path::new(&output_file).exists() {
                                 println!("  File created successfully");
                             }
                         } else {
-                            println!("⚠️ F0033: dump_memory reported failure for format {}", format);
+                            println!("⚠️ F0033: dump_memory_to_file reported failure for format {} (0 bytes written)", format);
                         }
                     }
                     Err(e) => {
@@ -437,23 +474,22 @@ async fn test_f0034_memory_map() {
             println!("✅ F0034: Test session started with PID {}", pid);
             
             // Test getting detailed memory map
-            let result = session.lldb_manager().get_memory_map(None);
+            let result = session.lldb_manager().get_memory_map();
             
             match result {
                 Ok(memory_map) => {
                     println!("✅ F0034: memory_map succeeded");
-                    println!("  Process ID: {}", memory_map.process_id);
-                    println!("  Base Address: 0x{:x}", memory_map.base_address);
-                    println!("  ASLR Slide: 0x{:x}", memory_map.aslr_slide);
+                    println!("  Total Segments: {}", memory_map.total_segments);
+                    println!("  Load Address: 0x{:x}", memory_map.load_address);
+                    println!("  ASLR Slide: 0x{:x}", memory_map.slide);
                     println!("  Segments: {}", memory_map.segments.len());
                     
                     for (i, segment) in memory_map.segments.iter().take(3).enumerate() {
                         println!("  Segment {}: {} (0x{:x}-0x{:x}) [{}]", 
                                i + 1, segment.name, segment.vm_address, 
-                               segment.vm_address + segment.vm_size, segment.protection);
+                               segment.vm_address + segment.vm_size, segment.max_protection);
                     }
                     
-                    assert_eq!(memory_map.process_id, pid);
                     assert!(memory_map.segments.len() > 0, "Should have at least one segment");
                 }
                 Err(e) => {
@@ -487,7 +523,7 @@ async fn test_memory_inspection_workflow() {
             println!("✅ Workflow: Test session started with PID {}", pid);
             
             // Step 1: Get memory map overview
-            match session.lldb_manager().get_memory_map(None) {
+            match session.lldb_manager().get_memory_map() {
                 Ok(memory_map) => {
                     println!("✅ Workflow: Got memory map with {} segments", memory_map.segments.len());
                     
@@ -495,10 +531,10 @@ async fn test_memory_inspection_workflow() {
                         let test_address = first_segment.vm_address;
                         
                         // Step 2: Read memory from first segment
-                        match session.lldb_manager().read_memory(test_address, 128, "hex") {
+                        match session.lldb_manager().read_memory(test_address, 128) {
                             Ok(memory_data) => {
                                 println!("✅ Workflow: Read {} bytes from 0x{:x}", 
-                                       memory_data.size, memory_data.address);
+                                       memory_data.len(), test_address);
                             }
                             Err(e) => {
                                 println!("⚠️ Workflow: Memory read failed: {}", e);
@@ -506,10 +542,10 @@ async fn test_memory_inspection_workflow() {
                         }
                         
                         // Step 3: Disassemble at the address
-                        match session.lldb_manager().disassemble(&format!("0x{:x}", test_address), 5) {
-                            Ok(disassembly) => {
+                        match session.lldb_manager().disassemble(test_address, 5) {
+                            Ok(instructions) => {
                                 println!("✅ Workflow: Disassembled {} instructions", 
-                                       disassembly.instructions.len());
+                                       instructions.len());
                             }
                             Err(e) => {
                                 println!("⚠️ Workflow: Disassembly failed: {}", e);
@@ -542,7 +578,7 @@ async fn test_memory_inspection_workflow() {
             }
             
             // Step 5: Search for a common pattern
-            match session.lldb_manager().search_memory("main", "ascii", 0x100000000, 0x10000) {
+            match session.lldb_manager().search_memory(b"main", Some(0x100000000), Some(0x10000)) {
                 Ok(matches) => {
                     println!("✅ Workflow: Memory search found {} matches for 'main'", matches.len());
                 }
@@ -577,31 +613,33 @@ async fn test_memory_modification_verification() {
     match session.start() {
         Ok(_pid) => {
             // Set breakpoint in memory scenario
-            let _ = session.lldb_manager().set_breakpoint("create_heap_patterns", None);
+            let _ = session.lldb_manager().set_breakpoint("create_heap_patterns");
             let _ = session.lldb_manager().continue_execution();
             
             let test_address = 0x100000000;
             let test_data = "MODIFIED";
             
             // Step 1: Read original memory
-            match session.lldb_manager().read_memory(test_address, 64, "ascii") {
+            match session.lldb_manager().read_memory(test_address, 64) {
                 Ok(original) => {
+                    let original_str = String::from_utf8_lossy(&original);
                     println!("✅ Verification: Original memory content: {}...", 
-                           original.content.chars().take(20).collect::<String>());
+                           original_str.chars().take(20).collect::<String>());
                     
                     // Step 2: Write new data
-                    match session.lldb_manager().write_memory(test_address, test_data, "ascii") {
-                        Ok(success) => {
-                            if success {
-                                println!("✅ Verification: Memory write successful");
+                    match session.lldb_manager().write_memory(test_address, test_data.as_bytes()) {
+                        Ok(bytes_written) => {
+                            if bytes_written > 0 {
+                                println!("✅ Verification: Memory write successful, wrote {} bytes", bytes_written);
                                 
                                 // Step 3: Read back to verify
-                                match session.lldb_manager().read_memory(test_address, 64, "ascii") {
+                                match session.lldb_manager().read_memory(test_address, 64) {
                                     Ok(modified) => {
+                                        let modified_str = String::from_utf8_lossy(&modified);
                                         println!("✅ Verification: Modified memory content: {}...", 
-                                               modified.content.chars().take(20).collect::<String>());
+                                               modified_str.chars().take(20).collect::<String>());
                                         
-                                        if modified.content.contains(test_data) {
+                                        if modified_str.contains(test_data) {
                                             println!("✅ Verification: Memory modification verified");
                                         } else {
                                             println!("⚠️ Verification: Memory modification not reflected");
@@ -612,7 +650,7 @@ async fn test_memory_modification_verification() {
                                     }
                                 }
                             } else {
-                                println!("⚠️ Verification: Memory write reported failure");
+                                println!("⚠️ Verification: Memory write reported failure (0 bytes written)");
                             }
                         }
                         Err(e) => {

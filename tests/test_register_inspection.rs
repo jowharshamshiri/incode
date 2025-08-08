@@ -13,10 +13,10 @@ use std::thread;
 
 // Import test setup utilities
 mod test_setup;
-use test_setup::{TestSession, TestMode, TestUtils};
+use test_setup::{TestSession, TestMode};
 
 use incode::lldb_manager::LldbManager;
-use incode::error::{IncodeError, IncodeResult};
+use incode::error::IncodeError;
 
 #[tokio::test]
 async fn test_f0046_get_registers_success() {
@@ -36,7 +36,7 @@ async fn test_f0046_get_registers_success() {
             println!("✅ F0046: Test session started with PID {}", pid);
             
             // Set breakpoint to get to a known state
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting all registers
@@ -45,20 +45,20 @@ async fn test_f0046_get_registers_success() {
             match result {
                 Ok(register_state) => {
                     println!("✅ F0046: get_registers succeeded");
-                    println!("  Thread ID: {}", register_state.thread_id);
-                    println!("  General Registers: {}", register_state.general_registers.len());
-                    println!("  Floating Point Registers: {}", register_state.float_registers.len());
-                    println!("  Vector Registers: {}", register_state.vector_registers.len());
+                    println!("  Thread ID: {:?}", register_state.thread_id);
+                    println!("  General Registers: {}", register_state.registers.len());
+                    println!("  Floating Point Registers: 0 /* not tracked in current RegisterState */");
+                    println!("  Vector Registers: 0 /* not tracked in current RegisterState */");
                     
                     // Display some general registers
-                    for (i, reg) in register_state.general_registers.iter().take(5).enumerate() {
+                    for (i, reg) in register_state.registers.values().take(5).enumerate() {
                         println!("  General {}: {} = 0x{:x}", i + 1, reg.name, reg.value);
                     }
                     
                     // Common registers should be present
-                    let has_pc = register_state.general_registers.iter()
+                    let has_pc = register_state.registers.values()
                         .any(|r| r.name.to_lowercase().contains("pc") || r.name.to_lowercase().contains("rip"));
-                    let has_sp = register_state.general_registers.iter()
+                    let has_sp = register_state.registers.values()
                         .any(|r| r.name.to_lowercase().contains("sp") || r.name.to_lowercase().contains("rsp"));
                     
                     if has_pc {
@@ -68,8 +68,8 @@ async fn test_f0046_get_registers_success() {
                         println!("✅ F0046: Found stack pointer register");
                     }
                     
-                    assert!(register_state.general_registers.len() > 0, "Should have general registers");
-                    assert!(register_state.thread_id > 0, "Thread ID should be valid");
+                    assert!(register_state.registers.len() > 0, "Should have general registers");
+                    assert!(register_state.thread_id.is_some(), "Thread ID should be present");
                 }
                 Err(e) => {
                     println!("⚠️ F0046: get_registers failed: {}", e);
@@ -114,12 +114,12 @@ async fn test_f0046_get_registers_specific_thread() {
                         match result {
                             Ok(register_state) => {
                                 println!("✅ F0046: get_registers succeeded for thread {}", target_thread_id);
-                                assert_eq!(register_state.thread_id, target_thread_id, 
+                                assert_eq!(register_state.thread_id, Some(target_thread_id), 
                                           "Register state should match requested thread");
                                 println!("  Registers for thread {}: {} general, {} float", 
-                                       register_state.thread_id,
-                                       register_state.general_registers.len(),
-                                       register_state.float_registers.len());
+                                       register_state.thread_id.unwrap_or(0),
+                                       register_state.registers.len(),
+                                       0 /* float registers not tracked */);
                             }
                             Err(e) => {
                                 println!("⚠️ F0046: get_registers failed for specific thread: {}", e);
@@ -160,13 +160,13 @@ async fn test_f0047_set_register() {
             println!("✅ F0047: Test session started with PID {}", pid);
             
             // Set breakpoint to get to a known state
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Get current registers first to find a suitable register to modify
             match session.lldb_manager().get_registers(None, false) {
                 Ok(register_state) => {
-                    if let Some(first_register) = register_state.general_registers.first() {
+                    if let Some(first_register) = register_state.registers.values().next() {
                         let register_name = &first_register.name;
                         let original_value = first_register.value;
                         let new_value = 0x12345678u64;
@@ -184,8 +184,8 @@ async fn test_f0047_set_register() {
                                     // Verify the change by reading registers again
                                     match session.lldb_manager().get_registers(None, false) {
                                         Ok(new_register_state) => {
-                                            if let Some(modified_register) = new_register_state.general_registers
-                                                .iter().find(|r| r.name == *register_name) {
+                                            if let Some(modified_register) = new_register_state.registers
+                                                .values().find(|r| r.name == *register_name) {
                                                 println!("  New value of {}: 0x{:x}", 
                                                        register_name, modified_register.value);
                                                 
@@ -240,7 +240,7 @@ async fn test_f0047_set_register_invalid() {
     
     match session.start() {
         Ok(_pid) => {
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test setting invalid register
@@ -285,31 +285,31 @@ async fn test_f0048_get_register_info() {
             println!("✅ F0048: Test session started with PID {}", pid);
             
             // Set breakpoint to get to a known state
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Get registers first to find available register names
             match session.lldb_manager().get_registers(None, false) {
                 Ok(register_state) => {
-                    if let Some(first_register) = register_state.general_registers.first() {
+                    if let Some(first_register) = register_state.registers.values().next() {
                         let register_name = &first_register.name;
                         
                         // Test getting detailed register info
-                        let result = session.lldb_manager().get_register_info(register_name);
+                        let result = session.lldb_manager().get_register_info(register_name, None);
                         
                         match result {
                             Ok(register_info) => {
                                 println!("✅ F0048: get_register_info succeeded for {}", register_name);
                                 println!("  Name: {}", register_info.name);
-                                println!("  Size: {} bits", register_info.bit_size);
-                                println!("  Offset: {}", register_info.byte_offset);
-                                println!("  Encoding: {}", register_info.encoding);
+                                println!("  Size: {} bits", register_info.size);
+                                println!("  Offset: 0 /* byte_offset not available in current RegisterInfo */");
+                                println!("  Encoding: {}", register_info.register_type);
                                 println!("  Format: {}", register_info.format);
-                                println!("  Generic Name: {}", register_info.generic_name.as_deref().unwrap_or("N/A"));
+                                println!("  Generic Name: N/A /* generic_name not available in current RegisterInfo */");
                                 
                                 assert_eq!(register_info.name, *register_name);
-                                assert!(register_info.bit_size > 0, "Register should have valid bit size");
-                                assert!(!register_info.encoding.is_empty(), "Encoding should not be empty");
+                                assert!(register_info.size > 0, "Register should have valid bit size");
+                                assert!(!register_info.register_type.is_empty(), "Encoding should not be empty");
                                 assert!(!register_info.format.is_empty(), "Format should not be empty");
                             }
                             Err(e) => {
@@ -348,11 +348,11 @@ async fn test_f0048_get_register_info_invalid() {
     
     match session.start() {
         Ok(_pid) => {
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting info for invalid register
-            let result = session.lldb_manager().get_register_info("invalid_register_name_12345");
+            let result = session.lldb_manager().get_register_info("invalid_register_name_12345", None);
             
             match result {
                 Err(e) => {
@@ -390,23 +390,23 @@ async fn test_f0049_save_register_state() {
             println!("✅ F0049: Test session started with PID {}", pid);
             
             // Set breakpoint to get to a known state
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test saving register state
-            let result = session.lldb_manager().save_register_state();
+            let result = session.lldb_manager().save_register_state(None);
             
             match result {
                 Ok(state_id) => {
-                    println!("✅ F0049: save_register_state succeeded with ID {}", state_id);
-                    assert!(state_id > 0, "State ID should be positive");
+                    println!("✅ F0049: save_register_state succeeded with timestamp {:?}", state_id.timestamp);
+                    assert!(state_id.registers.len() > 0, "Should have registers in saved state");
                     
                     // Verify the saved state by getting current registers
                     match session.lldb_manager().get_registers(None, false) {
                         Ok(register_state) => {
                             println!("  Saved state for {} general registers", 
-                                   register_state.general_registers.len());
-                            println!("  Thread ID: {}", register_state.thread_id);
+                                   register_state.registers.len());
+                            println!("  Thread ID: {:?}", register_state.thread_id);
                         }
                         Err(e) => {
                             println!("⚠️ F0049: Could not verify saved state: {}", e);
@@ -439,14 +439,14 @@ async fn test_f0049_save_register_state_no_process() {
         }
     };
     
-    let result = manager.save_register_state();
+    let result = manager.save_register_state(None);
     
     match result {
         Err(IncodeError::LldbOperation(msg)) => {
             println!("✅ F0049: Correctly handled no process case: {}", msg);
         }
-        Ok(state_id) => {
-            println!("⚠️ F0049: save_register_state unexpectedly succeeded with ID {}", state_id);
+        Ok(_state_id) => {
+            println!("⚠️ F0049: save_register_state unexpectedly succeeded");
         }
         Err(e) => {
             println!("✅ F0049: Error handling works: {}", e);
@@ -472,14 +472,14 @@ async fn test_register_inspection_workflow() {
             println!("✅ Workflow: Test session started with PID {}", pid);
             
             // Step 1: Get to a known state
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Step 2: Save initial register state
-            let saved_state_id = match session.lldb_manager().save_register_state() {
-                Ok(id) => {
-                    println!("✅ Workflow: Saved initial register state with ID {}", id);
-                    id
+            let _saved_state = match session.lldb_manager().save_register_state(None) {
+                Ok(state) => {
+                    println!("✅ Workflow: Saved initial register state");
+                    state
                 }
                 Err(e) => {
                     println!("⚠️ Workflow: Failed to save register state: {}", e);
@@ -491,9 +491,9 @@ async fn test_register_inspection_workflow() {
             let register_state = match session.lldb_manager().get_registers(None, true) {
                 Ok(state) => {
                     println!("✅ Workflow: Got registers - {} general, {} float, {} vector", 
-                           state.general_registers.len(),
-                           state.float_registers.len(),
-                           state.vector_registers.len());
+                           state.registers.len(),
+                           0 /* float registers not tracked */,
+                           0 /* vector registers not tracked */);
                     state
                 }
                 Err(e) => {
@@ -503,17 +503,17 @@ async fn test_register_inspection_workflow() {
             };
             
             // Step 4: Analyze specific registers
-            if let Some(first_register) = register_state.general_registers.first() {
+            if let Some(first_register) = register_state.registers.values().next() {
                 let register_name = &first_register.name;
                 let original_value = first_register.value;
                 
                 println!("  Analyzing register: {} = 0x{:x}", register_name, original_value);
                 
                 // Get detailed register info
-                match session.lldb_manager().get_register_info(register_name) {
+                match session.lldb_manager().get_register_info(register_name, None) {
                     Ok(info) => {
                         println!("✅ Workflow: Register info - Size: {} bits, Encoding: {}, Format: {}", 
-                               info.bit_size, info.encoding, info.format);
+                               info.size, info.register_type, info.format);
                     }
                     Err(e) => {
                         println!("⚠️ Workflow: Failed to get register info: {}", e);
@@ -530,8 +530,7 @@ async fn test_register_inspection_workflow() {
                             // Verify the change
                             match session.lldb_manager().get_registers(None, false) {
                                 Ok(new_state) => {
-                                    if let Some(modified_reg) = new_state.general_registers
-                                        .iter().find(|r| r.name == *register_name) {
+                                    if let Some(modified_reg) = new_state.registers.get(register_name) {
                                         println!("  Verified: {} = 0x{:x}", register_name, modified_reg.value);
                                     }
                                 }
@@ -550,10 +549,10 @@ async fn test_register_inspection_workflow() {
             }
             
             // Step 5: Save final register state
-            match session.lldb_manager().save_register_state() {
-                Ok(final_state_id) => {
-                    println!("✅ Workflow: Saved final register state with ID {}", final_state_id);
-                    assert_ne!(saved_state_id, final_state_id, "State IDs should be different");
+            match session.lldb_manager().save_register_state(None) {
+                Ok(_final_state) => {
+                    println!("✅ Workflow: Saved final register state");
+                    // State comparison removed - RegisterState doesn't implement PartialEq
                 }
                 Err(e) => {
                     println!("⚠️ Workflow: Failed to save final register state: {}", e);
@@ -585,12 +584,12 @@ async fn test_register_modification_safety() {
     
     match session.start() {
         Ok(_pid) => {
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Save initial state for recovery
-            let saved_state_id = match session.lldb_manager().save_register_state() {
-                Ok(id) => id,
+            let _saved_state = match session.lldb_manager().save_register_state(None) {
+                Ok(state) => state,
                 Err(e) => {
                     println!("⚠️ Safety: Could not save initial state: {}", e);
                     return;
@@ -603,7 +602,7 @@ async fn test_register_modification_safety() {
                     // Try to modify different types of registers safely
                     let mut modifications = Vec::new();
                     
-                    for register in register_state.general_registers.iter().take(3) {
+                    for register in register_state.registers.values().take(3) {
                         let original_value = register.value;
                         let test_value = 0x12345000 + modifications.len() as u64;
                         
@@ -628,8 +627,7 @@ async fn test_register_modification_safety() {
                         match session.lldb_manager().get_registers(None, false) {
                             Ok(new_state) => {
                                 for (name, _original, expected) in &modifications {
-                                    if let Some(reg) = new_state.general_registers.iter()
-                                        .find(|r| r.name == *name) {
+                                    if let Some(reg) = new_state.registers.get(name) {
                                         if reg.value == *expected {
                                             println!("  Verified {}: 0x{:x}", name, reg.value);
                                         } else {

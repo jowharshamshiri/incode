@@ -38,28 +38,25 @@ async fn test_f0022_get_backtrace_success() {
             println!("✅ F0022: Test session started with PID {}", pid);
             
             // Set breakpoint in nested function for good call stack
-            let _ = session.lldb_manager().set_breakpoint("create_call_stack_depth", None);
+            let _ = session.lldb_manager().set_breakpoint("create_call_stack_depth");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting backtrace
-            let result = session.lldb_manager().get_backtrace(false);
+            let result = session.lldb_manager().get_backtrace();
             
             match result {
                 Ok(backtrace) => {
-                    println!("✅ F0022: get_backtrace succeeded with {} frames", backtrace.frames.len());
+                    println!("✅ F0022: get_backtrace succeeded with {} frames", backtrace.len());
                     
-                    for (i, frame) in backtrace.frames.iter().take(5).enumerate() {
-                        println!("  Frame {}: {} at 0x{:x} ({}:{})", 
-                               i, frame.function_name, frame.address, 
-                               frame.source_file.as_deref().unwrap_or("unknown"), 
-                               frame.line_number.unwrap_or(0));
+                    for (i, frame) in backtrace.iter().take(5).enumerate() {
+                        println!("  Frame {}: {}", i, frame);
                     }
                     
-                    assert!(backtrace.frames.len() > 0, "Should have at least one frame");
+                    assert!(backtrace.len() > 0, "Should have at least one frame");
                     
                     // Look for expected functions in call stack
-                    let has_main = backtrace.frames.iter().any(|f| f.function_name.contains("main"));
-                    let has_target = backtrace.frames.iter().any(|f| f.function_name.contains("create_call_stack_depth"));
+                    let has_main = backtrace.iter().any(|f| f.contains("main"));
+                    let has_target = backtrace.iter().any(|f| f.contains("create_call_stack_depth"));
                     
                     if has_main {
                         println!("✅ F0022: Found main function in call stack");
@@ -97,20 +94,20 @@ async fn test_f0022_get_backtrace_with_addresses() {
     match session.start() {
         Ok(_pid) => {
             // Set breakpoint for stack analysis
-            let _ = session.lldb_manager().set_breakpoint("recursive_function", None);
+            let _ = session.lldb_manager().set_breakpoint("recursive_function");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting backtrace with addresses
-            let result = session.lldb_manager().get_backtrace(true);
+            let result = session.lldb_manager().get_backtrace();
             
             match result {
                 Ok(backtrace) => {
-                    println!("✅ F0022: get_backtrace with addresses succeeded, {} frames", backtrace.frames.len());
+                    println!("✅ F0022: get_backtrace with addresses succeeded, {} frames", backtrace.len());
                     
-                    for frame in &backtrace.frames {
-                        assert!(frame.address > 0, "Frame should have valid address");
-                        assert!(!frame.function_name.is_empty(), "Frame should have function name");
-                        println!("  Address 0x{:x}: {}", frame.address, frame.function_name);
+                    for frame in &backtrace {
+                        assert!(!frame.is_empty(), "Frame should not be empty");
+                        // Frame is a string, so just check it's not empty
+                        println!("  Frame: {}", frame);
                     }
                 }
                 Err(e) => {
@@ -144,13 +141,13 @@ async fn test_f0023_select_frame() {
             println!("✅ F0023: Test session started with PID {}", pid);
             
             // Set breakpoint in nested function
-            let _ = session.lldb_manager().set_breakpoint("test_function_with_params", None);
+            let _ = session.lldb_manager().set_breakpoint("test_function_with_params");
             let _ = session.lldb_manager().continue_execution();
             
             // Get backtrace first to know available frames
-            match session.lldb_manager().get_backtrace(false) {
+            match session.lldb_manager().get_backtrace() {
                 Ok(backtrace) => {
-                    if backtrace.frames.len() > 1 {
+                    if backtrace.len() > 1 {
                         // Test selecting different frame
                         let target_frame = 1;
                         let result = session.lldb_manager().select_frame(target_frame);
@@ -160,11 +157,11 @@ async fn test_f0023_select_frame() {
                                 println!("✅ F0023: select_frame succeeded for frame {}", target_frame);
                                 
                                 // Verify frame selection by getting frame info
-                                match session.lldb_manager().get_frame_info() {
+                                match session.lldb_manager().get_frame_info(Some(target_frame)) {
                                     Ok(frame_info) => {
                                         println!("  Selected frame: {} at 0x{:x}", 
-                                               frame_info.function_name, frame_info.address);
-                                        assert_eq!(frame_info.frame_index, target_frame, 
+                                               frame_info.function_name, frame_info.pc);
+                                        assert_eq!(frame_info.index, target_frame, 
                                                   "Frame index should match selected frame");
                                     }
                                     Err(e) => {
@@ -208,7 +205,7 @@ async fn test_f0023_select_frame_invalid_index() {
     
     match session.start() {
         Ok(_pid) => {
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test selecting invalid frame index
@@ -249,26 +246,26 @@ async fn test_f0024_get_frame_info() {
             println!("✅ F0024: Test session started with PID {}", pid);
             
             // Set breakpoint in function with known parameters
-            let _ = session.lldb_manager().set_breakpoint("test_function_with_params", None);
+            let _ = session.lldb_manager().set_breakpoint("test_function_with_params");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting frame info
-            let result = session.lldb_manager().get_frame_info();
+            let result = session.lldb_manager().get_frame_info(None);
             
             match result {
                 Ok(frame_info) => {
                     println!("✅ F0024: get_frame_info succeeded");
                     println!("  Function: {}", frame_info.function_name);
-                    println!("  Address: 0x{:x}", frame_info.address);
-                    println!("  Frame Index: {}", frame_info.frame_index);
-                    println!("  Module: {}", frame_info.module_name.as_deref().unwrap_or("N/A"));
+                    println!("  Address: 0x{:x}", frame_info.pc);
+                    println!("  Frame Index: {}", frame_info.index);
+                    println!("  Module: {}", frame_info.module.as_deref().unwrap_or("N/A"));
                     println!("  Source: {}:{}", 
-                           frame_info.source_file.as_deref().unwrap_or("unknown"),
-                           frame_info.line_number.unwrap_or(0));
+                           frame_info.file.as_deref().unwrap_or("unknown"),
+                           frame_info.line.unwrap_or(0));
                     
                     assert!(!frame_info.function_name.is_empty(), "Function name should not be empty");
-                    assert!(frame_info.address > 0, "Address should be valid");
-                    assert!(frame_info.frame_index >= 0, "Frame index should be valid");
+                    assert!(frame_info.pc > 0, "Address should be valid");
+                    assert!(frame_info.index >= 0, "Frame index should be valid");
                 }
                 Err(e) => {
                     println!("⚠️ F0024: get_frame_info failed: {}", e);
@@ -301,11 +298,11 @@ async fn test_f0025_get_frame_variables() {
             println!("✅ F0025: Test session started with PID {}", pid);
             
             // Set breakpoint in function with local variables
-            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables", None);
+            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting frame variables
-            let result = session.lldb_manager().get_frame_variables(None);
+            let result = session.lldb_manager().get_frame_variables(None, false);
             
             match result {
                 Ok(variables) => {
@@ -357,11 +354,11 @@ async fn test_f0026_get_frame_arguments() {
             println!("✅ F0026: Test session started with PID {}", pid);
             
             // Set breakpoint in function with known parameters
-            let _ = session.lldb_manager().set_breakpoint("function_with_parameters", None);
+            let _ = session.lldb_manager().set_breakpoint("function_with_parameters");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting frame arguments
-            let result = session.lldb_manager().get_frame_arguments();
+            let result = session.lldb_manager().get_frame_arguments(None);
             
             match result {
                 Ok(arguments) => {
@@ -413,13 +410,13 @@ async fn test_f0027_evaluate_in_frame() {
             println!("✅ F0027: Test session started with PID {}", pid);
             
             // Set breakpoint in function with local variables
-            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables", None);
+            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables");
             let _ = session.lldb_manager().continue_execution();
             
             // Get backtrace to know frame indices
-            match session.lldb_manager().get_backtrace(false) {
+            match session.lldb_manager().get_backtrace() {
                 Ok(backtrace) => {
-                    if backtrace.frames.len() > 0 {
+                    if backtrace.len() > 0 {
                         let frame_index = 0; // Current frame
                         
                         // Test evaluating expressions in specific frame
@@ -430,15 +427,14 @@ async fn test_f0027_evaluate_in_frame() {
                         ];
                         
                         for expr in expressions {
-                            let result = session.lldb_manager().evaluate_in_frame(expr, frame_index);
+                            let result = session.lldb_manager().evaluate_in_frame(Some(frame_index), expr);
                             
                             match result {
                                 Ok(eval_result) => {
-                                    println!("✅ F0027: evaluate_in_frame succeeded for '{}': {} = {} ({})", 
-                                           expr, eval_result.expression, eval_result.value, eval_result.result_type);
+                                    println!("✅ F0027: evaluate_in_frame succeeded for '{}': result = {}", 
+                                           expr, eval_result);
                                     
-                                    assert_eq!(eval_result.expression, expr);
-                                    assert!(!eval_result.value.is_empty());
+                                    assert!(!eval_result.is_empty());
                                 }
                                 Err(e) => {
                                     println!("⚠️ F0027: evaluate_in_frame failed for '{}': {}", expr, e);
@@ -477,11 +473,11 @@ async fn test_f0027_evaluate_in_frame_invalid() {
     
     match session.start() {
         Ok(_pid) => {
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test invalid frame index
-            let result = session.lldb_manager().evaluate_in_frame("1 + 1", 99999);
+            let result = session.lldb_manager().evaluate_in_frame(Some(99999), "1 + 1");
             
             match result {
                 Err(e) => {
@@ -493,7 +489,7 @@ async fn test_f0027_evaluate_in_frame_invalid() {
             }
             
             // Test invalid expression in valid frame
-            let result = session.lldb_manager().evaluate_in_frame("nonexistent_variable_12345", 0);
+            let result = session.lldb_manager().evaluate_in_frame(Some(0), "nonexistent_variable_12345");
             
             match result {
                 Err(e) => {
@@ -530,13 +526,13 @@ async fn test_stack_analysis_workflow() {
             println!("✅ Workflow: Test session started with PID {}", pid);
             
             // Step 1: Get to a function with deep call stack
-            let _ = session.lldb_manager().set_breakpoint("create_call_stack_depth", None);
+            let _ = session.lldb_manager().set_breakpoint("create_call_stack_depth");
             let _ = session.lldb_manager().continue_execution();
             
             // Step 2: Get backtrace
-            let backtrace = match session.lldb_manager().get_backtrace(true) {
+            let backtrace = match session.lldb_manager().get_backtrace() {
                 Ok(bt) => {
-                    println!("✅ Workflow: Got backtrace with {} frames", bt.frames.len());
+                    println!("✅ Workflow: Got backtrace with {} frames", bt.len());
                     bt
                 }
                 Err(e) => {
@@ -546,8 +542,8 @@ async fn test_stack_analysis_workflow() {
             };
             
             // Step 3: Analyze each frame
-            for (i, frame) in backtrace.frames.iter().take(3).enumerate() {
-                println!("  Analyzing frame {}: {} at 0x{:x}", i, frame.function_name, frame.address);
+            for (i, frame) in backtrace.iter().take(3).enumerate() {
+                println!("  Analyzing frame {}: {}", i, frame);
                 
                 // Select frame
                 match session.lldb_manager().select_frame(i as u32) {
@@ -555,18 +551,18 @@ async fn test_stack_analysis_workflow() {
                         println!("✅ Workflow: Selected frame {}", i);
                         
                         // Get frame info
-                        match session.lldb_manager().get_frame_info() {
+                        match session.lldb_manager().get_frame_info(Some(i as u32)) {
                             Ok(info) => {
                                 println!("  Frame info: {} at {}:{}", 
                                        info.function_name, 
-                                       info.source_file.as_deref().unwrap_or("unknown"),
-                                       info.line_number.unwrap_or(0));
+                                       info.file.as_deref().unwrap_or("unknown"),
+                                       info.line.unwrap_or(0));
                             }
                             Err(e) => println!("⚠️ Workflow: Failed to get frame info: {}", e),
                         }
                         
                         // Get frame variables
-                        match session.lldb_manager().get_frame_variables(None) {
+                        match session.lldb_manager().get_frame_variables(None, false) {
                             Ok(vars) => {
                                 println!("  Found {} variables in frame", vars.len());
                             }
@@ -574,7 +570,7 @@ async fn test_stack_analysis_workflow() {
                         }
                         
                         // Get frame arguments
-                        match session.lldb_manager().get_frame_arguments() {
+                        match session.lldb_manager().get_frame_arguments(None) {
                             Ok(args) => {
                                 println!("  Found {} arguments in frame", args.len());
                             }
@@ -582,9 +578,9 @@ async fn test_stack_analysis_workflow() {
                         }
                         
                         // Evaluate expression in frame context
-                        match session.lldb_manager().evaluate_in_frame("sizeof(int)", i as u32) {
+                        match session.lldb_manager().evaluate_in_frame(Some(i as u32), "sizeof(int)") {
                             Ok(result) => {
-                                println!("  Expression evaluation: sizeof(int) = {}", result.value);
+                                println!("  Expression evaluation: sizeof(int) = {}", result);
                             }
                             Err(e) => println!("⚠️ Workflow: Failed to evaluate expression: {}", e),
                         }

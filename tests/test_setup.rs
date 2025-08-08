@@ -300,7 +300,7 @@ impl TestSession {
     
     /// Set a breakpoint at a known location
     pub fn set_test_breakpoint(&mut self, location: &str) -> IncodeResult<()> {
-        match self.lldb_manager.set_breakpoint(location, None) {
+        match self.lldb_manager.set_breakpoint(location) {
             Ok(bp_id) => {
                 println!("Set test breakpoint {} at {}", bp_id, location);
                 Ok(())
