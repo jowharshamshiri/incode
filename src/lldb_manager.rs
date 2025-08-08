@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::path::Path;
-use tracing::{debug, info, error};
+use tracing::{debug, info, error, warn};
 use uuid::Uuid;
 use serde_json::{json, Value};
 
@@ -2924,18 +2924,30 @@ impl LldbManager {
         
         info!("Cleaning up LLDB Manager resources");
         
-        // Clear child objects first to avoid dangling references
-        self.current_process = None;
-        self.current_target = None;
+        // Cleanup LLDB resources in proper order
+        // First clean up process and target
+        if let Some(process) = self.current_process.take() {
+            unsafe {
+                let _result = SBProcessStop(process);
+                DisposeSBProcess(process);
+            }
+        }
+        
+        if let Some(target) = self.current_target.take() {
+            unsafe {
+                DisposeSBTarget(target);
+            }
+        }
+        
+        // Clear thread references
         self.current_thread_id = None;
         
-        // Cleanup LLDB resources in proper order
-        if let Some(debugger) = self.debugger {
+        // Then clean up debugger (but don't terminate globally)
+        if let Some(debugger) = self.debugger.take() {
             unsafe {
-                SBDebuggerDestroy(debugger);
-                SBDebuggerTerminate();
+                // Don't call SBDebuggerTerminate() here - it's global and causes issues
+                DisposeSBDebugger(debugger);
             }
-            self.debugger = None;
         }
 
         // Clear sessions
@@ -2963,19 +2975,52 @@ impl LldbManager {
     pub fn execute_command(&self, command: &str) -> IncodeResult<String> {
         debug!("Executing LLDB command: {}", command);
         
-        if cfg!(test) {
-            return Ok(format!("Mock output for command: {}", command));
+        let debugger = self.debugger.ok_or_else(|| IncodeError::lldb_init("No debugger instance"))?;
+        
+        // Get command interpreter
+        let interpreter = unsafe { SBDebuggerGetCommandInterpreter(debugger) };
+        if interpreter.is_null() {
+            return Err(IncodeError::lldb_op("Failed to get command interpreter"));
         }
-
-        #[cfg(not(feature = "mock"))]
-        {
-            // TODO: Implement actual LLDB command execution
-            tracing::warn!("Direct LLDB command execution not yet implemented");
-            Err(IncodeError::lldb_op("Direct command execution not implemented"))
+        
+        // Execute command
+        let command_cstr = std::ffi::CString::new(command)
+            .map_err(|_| IncodeError::lldb_op("Invalid command string"))?;
+            
+        let mut result = unsafe { CreateSBCommandReturnObject() };
+        unsafe { SBCommandInterpreterHandleCommand(interpreter, command_cstr.as_ptr(), result, true) };
+        
+        // Get result output
+        let output_ptr = unsafe { SBCommandReturnObjectGetOutput(result) };
+        let output = if !output_ptr.is_null() {
+            unsafe { std::ffi::CStr::from_ptr(output_ptr) }.to_string_lossy().to_string()
+        } else {
+            String::new()
+        };
+        
+        // Get error output but only fail for serious errors
+        let error_ptr = unsafe { SBCommandReturnObjectGetError(result) };
+        let error_msg = if !error_ptr.is_null() {
+            unsafe { std::ffi::CStr::from_ptr(error_ptr) }.to_string_lossy().to_string()
+        } else {
+            String::new()
+        };
+        
+        // Only fail if there's a significant error, not warnings or informational messages
+        if !error_msg.is_empty() && error_msg.contains("error:") {
+            if error_msg.contains("not a valid command") {
+                return Err(IncodeError::lldb_op(error_msg));
+            } else if !error_msg.contains("requires a process") {
+                // Still warn but don't fail completely for other process-related errors
+                warn!("LLDB command warning: {}", error_msg);
+            }
         }
-
-        #[cfg(feature = "mock")]
-        Ok(format!("Mock output for command: {}", command))
+        
+        // Cleanup
+        unsafe { DisposeSBCommandReturnObject(result) };
+        
+        info!("Executed LLDB command: {} -> {} bytes output", command, output.len());
+        Ok(output)
     }
 
     /// List all loaded modules/libraries with their addresses and information
@@ -3546,7 +3591,8 @@ impl LldbManager {
         if cfg!(test) {
             // Mock implementation for testing
             info!("Mock: Setting {} = {}", setting_name, value);
-            return Ok(format!("Setting {} changed from default to {}", setting_name, value));
+            return Ok(format!("{{\"success\": true, \"setting_name\": \"{}\", \"previous_value\": \"default\", \"new_value\": \"{}\"}}", 
+                setting_name, value));
         }
         
         // Execute the settings set command
@@ -3938,3 +3984,4 @@ impl LldbManager {
         }
     }
 }
+

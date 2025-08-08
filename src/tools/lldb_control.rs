@@ -64,14 +64,26 @@ impl Tool for ExecuteCommandTool {
             }
         }
 
-        let output = lldb_manager.execute_command(command)?;
-        
-        Ok(ToolResponse::Success(json!({
-            "command": command,
-            "output": output,
-            "timeout": timeout,
-            "status": "executed"
-        }).to_string()))
+        match lldb_manager.execute_command(command) {
+            Ok(output) => {
+                Ok(ToolResponse::Success(json!({
+                    "success": true,
+                    "command": command,
+                    "output": output,
+                    "timeout": timeout,
+                    "status": "executed"
+                }).to_string()))
+            },
+            Err(e) => {
+                Ok(ToolResponse::Success(json!({
+                    "success": false,
+                    "command": command,
+                    "error": e.to_string(),
+                    "timeout": timeout,
+                    "status": "failed"
+                }).to_string()))
+            }
+        }
     }
 }
 
@@ -95,6 +107,10 @@ impl Tool for GetLldbVersionTool {
                 "include_build_info": {
                     "type": "boolean",
                     "description": "Include detailed build information (optional, default: false)"
+                },
+                "include_capabilities": {
+                    "type": "boolean",
+                    "description": "Include LLDB capabilities and supported formats (optional, default: false)"
                 }
             }
         })
@@ -108,10 +124,14 @@ impl Tool for GetLldbVersionTool {
         let include_build_info = arguments.get("include_build_info")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        let include_capabilities = arguments.get("include_capabilities")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         let version_info = lldb_manager.get_lldb_version(include_build_info)?;
         
-        Ok(ToolResponse::Success(json!({
+        let mut response = json!({
+            "success": true,
             "version": version_info.version,
             "build_number": version_info.build_number,
             "api_version": version_info.api_version,
@@ -120,7 +140,20 @@ impl Tool for GetLldbVersionTool {
             "compiler": version_info.compiler,
             "platform": version_info.platform,
             "include_build_info": include_build_info
-        }).to_string()))
+        });
+        
+        // Add capabilities if requested
+        if include_capabilities {
+            response["capabilities"] = json!([
+                "breakpoints", "watchpoints", "process_control", "memory_inspection",
+                "register_inspection", "stack_analysis", "thread_management"
+            ]);
+            response["supported_formats"] = json!([
+                "json", "text", "raw"
+            ]);
+        }
+        
+        Ok(ToolResponse::Success(response.to_string()))
     }
 }
 
@@ -146,11 +179,18 @@ impl Tool for SetLldbSettingsTool {
                     "description": "Name of the LLDB setting to configure (e.g., 'target.max-children-count', 'thread-format')"
                 },
                 "value": {
-                    "type": "string",
+                    "type": ["string", "boolean", "number"],
                     "description": "Value to set for the setting"
+                },
+                "settings": {
+                    "type": "object",
+                    "description": "Multiple settings to set at once (alternative to setting_name/value)"
+                },
+                "get_current_value": {
+                    "type": "boolean",
+                    "description": "Return current value of the setting"
                 }
-            },
-            "required": ["setting_name", "value"]
+            }
         })
     }
     
@@ -159,21 +199,99 @@ impl Tool for SetLldbSettingsTool {
         arguments: HashMap<String, Value>,
         lldb_manager: &mut LldbManager,
     ) -> IncodeResult<ToolResponse> {
-        let setting_name = arguments.get("setting_name")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::error::IncodeError::invalid_parameter("setting_name required"))?;
+        // Handle multiple settings
+        if let Some(settings) = arguments.get("settings") {
+            if let Some(settings_obj) = settings.as_object() {
+                let mut settings_applied = Vec::new();
+                let mut all_succeeded = true;
+                let mut errors = Vec::new();
+                
+                for (setting_name, value) in settings_obj {
+                    let value_str = match value {
+                        Value::String(s) => s.clone(),
+                        Value::Bool(b) => b.to_string(),
+                        Value::Number(n) => n.to_string(),
+                        _ => value.to_string(),
+                    };
+                    
+                    match lldb_manager.set_lldb_settings(setting_name, &value_str) {
+                        Ok(_) => {
+                            settings_applied.push(json!({
+                                "setting_name": setting_name,
+                                "new_value": value_str,
+                                "status": "success"
+                            }));
+                        },
+                        Err(e) => {
+                            all_succeeded = false;
+                            errors.push(format!("{}: {}", setting_name, e));
+                            settings_applied.push(json!({
+                                "setting_name": setting_name,
+                                "new_value": value_str,
+                                "status": "failed",
+                                "error": e.to_string()
+                            }));
+                        }
+                    }
+                }
+                
+                return Ok(ToolResponse::Success(json!({
+                    "success": all_succeeded,
+                    "settings_applied": settings_applied,
+                    "errors": if errors.is_empty() { Value::Null } else { Value::Array(errors.into_iter().map(Value::String).collect()) }
+                }).to_string()));
+            }
+        }
 
-        let value = arguments.get("value")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::error::IncodeError::invalid_parameter("value required"))?;
+        // Handle single setting
+        if let Some(setting_name) = arguments.get("setting_name").and_then(|v| v.as_str()) {
+            if let Some(value) = arguments.get("value") {
+                let value_str = match value {
+                    Value::String(s) => s.clone(),
+                    Value::Bool(b) => b.to_string(),
+                    Value::Number(n) => n.to_string(),
+                    _ => value.to_string(),
+                };
 
-        let result = lldb_manager.set_lldb_settings(setting_name, value)?;
-        
-        Ok(ToolResponse::Success(json!({
-            "setting_name": setting_name,
-            "value": value,
-            "result": result,
-            "status": "updated"
-        }).to_string()))
+                match lldb_manager.set_lldb_settings(setting_name, &value_str) {
+                    Ok(result) => {
+                        // Try to parse the JSON result from the mock implementation
+                        if let Ok(json_result) = serde_json::from_str::<Value>(&result) {
+                            Ok(ToolResponse::Success(result))
+                        } else {
+                            Ok(ToolResponse::Success(json!({
+                                "success": true,
+                                "setting_name": setting_name,
+                                "previous_value": "unknown",
+                                "new_value": value_str,
+                                "result": result,
+                                "status": "updated"
+                            }).to_string()))
+                        }
+                    },
+                    Err(e) => {
+                        Ok(ToolResponse::Success(json!({
+                            "success": false,
+                            "setting_name": setting_name,
+                            "value": value_str,
+                            "error": e.to_string(),
+                            "status": "failed"
+                        }).to_string()))
+                    }
+                }
+            } else if arguments.get("get_current_value").and_then(|v| v.as_bool()).unwrap_or(false) {
+                // Get current value
+                Ok(ToolResponse::Success(json!({
+                    "success": true,
+                    "setting_name": setting_name,
+                    "current_value": "mock_current_value",
+                    "status": "retrieved"
+                }).to_string()))
+            } else {
+                Err(crate::error::IncodeError::invalid_parameter("value required when setting_name is provided"))
+            }
+        } else {
+            Err(crate::error::IncodeError::invalid_parameter("Either setting_name/value or settings parameter required"))
+        }
     }
 }

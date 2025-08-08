@@ -36,7 +36,7 @@ async fn test_execute_command_comprehensive() {
     let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate command execution response
-    assert!(response["success"].as_bool().unwrap_or(false), "execute_command help should succeed");
+    assert_eq!(response["status"].as_str().unwrap_or(""), "executed", "execute_command should execute successfully");
     assert!(response["output"].is_string(), "Should return command output");
     assert!(response["command"].is_string(), "Should echo back command");
     
