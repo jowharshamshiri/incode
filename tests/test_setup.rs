@@ -59,6 +59,11 @@ impl TestDebuggee {
         })
     }
     
+    /// Get the binary path
+    pub fn binary_path(&self) -> &PathBuf {
+        &self.binary_path
+    }
+
     /// Find the test_debuggee binary
     fn find_test_binary() -> IncodeResult<PathBuf> {
         // Try multiple possible locations

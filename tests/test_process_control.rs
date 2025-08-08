@@ -17,6 +17,9 @@
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::time::Duration;
+
+mod test_setup;
+use test_setup::{TestDebuggee, TestMode};
 use tempfile::NamedTempFile;
 use std::io::Write;
 
@@ -28,12 +31,12 @@ async fn test_f0001_launch_process_success() {
     // F0001: launch_process - Test successful process launch
     let mut manager = LldbManager::new(None).expect("Failed to create LLDB manager");
     
-    // Create a simple test executable
-    let test_program = create_test_executable();
-    let args = vec!["arg1".to_string(), "arg2".to_string()];
+    // Use the existing test_debuggee binary
+    let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
+    let args = vec!["--mode".to_string(), "normal".to_string()];
     let env = HashMap::new();
     
-    let result = manager.launch_process(&test_program, &args, &env);
+    let result = manager.launch_process(&test_debuggee.binary_path().to_string_lossy(), &args, &env);
     
     match result {
         Ok(pid) => {
