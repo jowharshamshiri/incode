@@ -8,24 +8,28 @@ use std::path::Path;
 use serde_json::Value;
 
 mod test_setup;
-use test_setup::{TestDebuggee, TestMode, LldbTestSession};
+use test_setup::{TestDebuggee, TestMode, TestSession};
 
 use incode::tools::session_management::{
     CreateSessionTool, SaveSessionTool, LoadSessionTool, CleanupSessionTool
 };
-use incode::mcp_server::McpTool;
+use incode::tools::{Tool, ToolResponse};
 
-#[test]
-fn test_create_session_comprehensive() {
+#[tokio::test]
+async fn test_create_session_comprehensive() {
     let _test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
     
-    let tool = CreateSessionTool::new(session.manager());
+    let tool = CreateSessionTool;
     
     // Test 1: Create basic session
     let args = HashMap::new();
-    let result = tool.call(args).expect("create_session failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("create_session failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate session creation response
     assert!(response["success"].as_bool().unwrap_or(false), "create_session should succeed");
@@ -44,8 +48,12 @@ fn test_create_session_comprehensive() {
     let mut args_named = HashMap::new();
     args_named.insert("session_name".to_string(), Value::String("TestSession".to_string()));
     
-    let result_named = tool.call(args_named).expect("create_session with name failed");
-    let response_named: Value = serde_json::from_str(&result_named).expect("Invalid JSON response");
+    let result_named = tool.execute(args_named, session.lldb_manager()).await.expect("create_session with name failed");
+    let result_named_str = match result_named {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_named: Value = serde_json::from_str(&result_named_str).expect("Invalid JSON response");
     
     assert!(response_named["success"].as_bool().unwrap_or(false), "Named session creation should succeed");
     if let Some(name) = response_named.get("session_name") {
@@ -56,8 +64,12 @@ fn test_create_session_comprehensive() {
     let mut args_metadata = HashMap::new();
     args_metadata.insert("include_environment_info".to_string(), Value::Bool(true));
     
-    let result_metadata = tool.call(args_metadata).expect("create_session with metadata failed");
-    let response_metadata: Value = serde_json::from_str(&result_metadata).expect("Invalid JSON response");
+    let result_metadata = tool.execute(args_metadata, session.lldb_manager()).await.expect("create_session with metadata failed");
+    let result_metadata_str = match result_metadata {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_metadata: Value = serde_json::from_str(&result_metadata_str).expect("Invalid JSON response");
     
     assert!(response_metadata["success"].as_bool().unwrap_or(false), "Metadata session creation should succeed");
     
@@ -67,22 +79,28 @@ fn test_create_session_comprehensive() {
     }
 }
 
-#[test]
-fn test_save_session_comprehensive() {
+#[tokio::test]
+async fn test_save_session_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    let _pid = session.start().expect("Failed to start session");
     
     // Create debugging state to save
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    session.continue_execution().expect("Failed to continue");
     
-    let save_tool = SaveSessionTool::new(session.manager());
+    let save_tool = SaveSessionTool;
     
     // Test 1: Save basic session
     let mut args = HashMap::new();
     args.insert("session_name".to_string(), Value::String("test_save_session".to_string()));
     
-    let result = save_tool.call(args).expect("save_session failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = save_tool.execute(args, session.lldb_manager()).await.expect("save_session failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate session save response
     assert!(response["success"].as_bool().unwrap_or(false), "save_session should succeed");
@@ -99,8 +117,12 @@ fn test_save_session_comprehensive() {
     args_full.insert("include_breakpoints".to_string(), Value::Bool(true));
     args_full.insert("include_variables".to_string(), Value::Bool(true));
     
-    let result_full = save_tool.call(args_full).expect("save_session full failed");
-    let response_full: Value = serde_json::from_str(&result_full).expect("Invalid JSON response");
+    let result_full = save_tool.execute(args_full, session.lldb_manager()).await.expect("save_session full failed");
+    let result_full_str = match result_full {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_full: Value = serde_json::from_str(&result_full_str).expect("Invalid JSON response");
     
     assert!(response_full["success"].as_bool().unwrap_or(false), "Full session save should succeed");
     
@@ -122,8 +144,12 @@ fn test_save_session_comprehensive() {
     args_path.insert("session_name".to_string(), Value::String("test_custom_path".to_string()));
     args_path.insert("save_path".to_string(), Value::String(session_dir.to_string_lossy().to_string()));
     
-    let result_path = save_tool.call(args_path).expect("save_session to path failed");
-    let response_path: Value = serde_json::from_str(&result_path).expect("Invalid JSON response");
+    let result_path = save_tool.execute(args_path, session.lldb_manager()).await.expect("save_session to path failed");
+    let result_path_str = match result_path {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_path: Value = serde_json::from_str(&result_path_str).expect("Invalid JSON response");
     
     assert!(response_path["success"].as_bool().unwrap_or(false), "Custom path save should succeed");
     
@@ -140,35 +166,45 @@ fn test_save_session_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_load_session_comprehensive() {
+#[tokio::test]
+async fn test_load_session_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    let _pid = session.start().expect("Failed to start session");
     
     // Create and save a session to load
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    session.continue_execution().expect("Failed to continue");
     
-    let save_tool = SaveSessionTool::new(session.manager());
+    let save_tool = SaveSessionTool;
     let mut save_args = HashMap::new();
     save_args.insert("session_name".to_string(), Value::String("test_load_session".to_string()));
     save_args.insert("include_breakpoints".to_string(), Value::Bool(true));
     
-    let save_result = save_tool.call(save_args).expect("Failed to save session for loading test");
-    let save_response: Value = serde_json::from_str(&save_result).expect("Invalid JSON response");
+    let save_result = save_tool.execute(save_args, session.lldb_manager()).await.expect("Failed to save session for loading test");
+    let save_result_str = match save_result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let save_response: Value = serde_json::from_str(&save_result_str).expect("Invalid JSON response");
     let saved_file_path = save_response["file_path"].as_str().expect("file_path should be string");
     
     session.cleanup().expect("Failed to cleanup session for reload test");
     
     // Now test loading the session
-    let new_session = LldbTestSession::new().expect("Failed to create new LLDB session");
-    let load_tool = LoadSessionTool::new(new_session.manager());
+    let mut new_session = TestSession::new(TestMode::Normal).expect("Failed to create new LLDB session");
+    let load_tool = LoadSessionTool;
     
     // Test 1: Load session by file path
     let mut args = HashMap::new();
     args.insert("file_path".to_string(), Value::String(saved_file_path.to_string()));
     
-    let result = load_tool.call(args).expect("load_session failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = load_tool.execute(args, new_session.lldb_manager()).await.expect("load_session failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate session load response
     assert!(response["success"].as_bool().unwrap_or(false), "load_session should succeed");
@@ -185,8 +221,12 @@ fn test_load_session_comprehensive() {
     args_restore.insert("restore_breakpoints".to_string(), Value::Bool(true));
     args_restore.insert("restore_target".to_string(), Value::Bool(false)); // Don't restart target
     
-    let result_restore = load_tool.call(args_restore).expect("load_session with restore failed");
-    let response_restore: Value = serde_json::from_str(&result_restore).expect("Invalid JSON response");
+    let result_restore = load_tool.execute(args_restore, new_session.lldb_manager()).await.expect("load_session with restore failed");
+    let result_restore_str = match result_restore {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_restore: Value = serde_json::from_str(&result_restore_str).expect("Invalid JSON response");
     
     assert!(response_restore["success"].as_bool().unwrap_or(false), "Restore session should succeed");
     
@@ -199,8 +239,12 @@ fn test_load_session_comprehensive() {
     let mut args_name = HashMap::new();
     args_name.insert("session_name".to_string(), Value::String("test_load_session".to_string()));
     
-    let result_name = load_tool.call(args_name).expect("load_session by name should work");
-    let response_name: Value = serde_json::from_str(&result_name).expect("Invalid JSON response");
+    let result_name = load_tool.execute(args_name, new_session.lldb_manager()).await.expect("load_session by name should work");
+    let result_name_str = match result_name {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_name: Value = serde_json::from_str(&result_name_str).expect("Invalid JSON response");
     
     // Should succeed or gracefully handle name-based loading
     assert!(response_name["success"].is_boolean(), "Should return success status");
@@ -209,20 +253,26 @@ fn test_load_session_comprehensive() {
     let _ = fs::remove_file(saved_file_path);
 }
 
-#[test]  
-fn test_cleanup_session_comprehensive() {
+#[tokio::test]  
+async fn test_cleanup_session_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    let _pid = session.start().expect("Failed to start session");
     
     // Create debugging state to cleanup
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    session.continue_execution().expect("Failed to continue");
     
-    let cleanup_tool = CleanupSessionTool::new(session.manager());
+    let cleanup_tool = CleanupSessionTool;
     
     // Test 1: Basic session cleanup
     let args = HashMap::new();
-    let result = cleanup_tool.call(args).expect("cleanup_session failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = cleanup_tool.execute(args, session.lldb_manager()).await.expect("cleanup_session failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate cleanup response
     assert!(response["success"].as_bool().unwrap_or(false), "cleanup_session should succeed");
@@ -233,18 +283,24 @@ fn test_cleanup_session_comprehensive() {
     assert!(resources_cleaned.len() > 0, "Should clean up some resources");
     
     // Test 2: Cleanup with specific options
-    let mut new_session = LldbTestSession::new().expect("Failed to create new session");
-    new_session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    let mut new_session = TestSession::new(TestMode::Normal).expect("Failed to create new session");
+    let _pid2 = new_session.start().expect("Failed to start session");
+    new_session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    new_session.continue_execution().expect("Failed to continue");
     
-    let cleanup_tool2 = CleanupSessionTool::new(new_session.manager());
+    let cleanup_tool2 = CleanupSessionTool;
     
     let mut args_options = HashMap::new();
     args_options.insert("cleanup_breakpoints".to_string(), Value::Bool(true));
     args_options.insert("cleanup_processes".to_string(), Value::Bool(true));
     args_options.insert("cleanup_files".to_string(), Value::Bool(false));
     
-    let result_options = cleanup_tool2.call(args_options).expect("cleanup_session with options failed");
-    let response_options: Value = serde_json::from_str(&result_options).expect("Invalid JSON response");
+    let result_options = cleanup_tool2.execute(args_options, new_session.lldb_manager()).await.expect("cleanup_session with options failed");
+    let result_options_str = match result_options {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_options: Value = serde_json::from_str(&result_options_str).expect("Invalid JSON response");
     
     assert!(response_options["success"].as_bool().unwrap_or(false), "Options cleanup should succeed");
     
@@ -253,16 +309,22 @@ fn test_cleanup_session_comprehensive() {
     assert!(options_resources.len() > 0, "Should clean specific resources");
     
     // Test 3: Force cleanup
-    let mut force_session = LldbTestSession::new().expect("Failed to create force session");
-    force_session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    let mut force_session = TestSession::new(TestMode::Normal).expect("Failed to create force session");
+    let _pid3 = force_session.start().expect("Failed to start session");
+    force_session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    force_session.continue_execution().expect("Failed to continue");
     
-    let cleanup_tool3 = CleanupSessionTool::new(force_session.manager());
+    let cleanup_tool3 = CleanupSessionTool;
     
     let mut args_force = HashMap::new();
     args_force.insert("force_cleanup".to_string(), Value::Bool(true));
     
-    let result_force = cleanup_tool3.call(args_force).expect("force cleanup failed");
-    let response_force: Value = serde_json::from_str(&result_force).expect("Invalid JSON response");
+    let result_force = cleanup_tool3.execute(args_force, force_session.lldb_manager()).await.expect("force cleanup failed");
+    let result_force_str = match result_force {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_force: Value = serde_json::from_str(&result_force_str).expect("Invalid JSON response");
     
     assert!(response_force["success"].as_bool().unwrap_or(false), "Force cleanup should succeed");
     
@@ -272,51 +334,69 @@ fn test_cleanup_session_comprehensive() {
     }
 }
 
-#[test]
-fn test_session_lifecycle_integration() {
+#[tokio::test]
+async fn test_session_lifecycle_integration() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    let _pid = session.start().expect("Failed to start session");
     
     // Test complete session lifecycle: create -> use -> save -> cleanup -> load
     
     // Step 1: Create session
-    let create_tool = CreateSessionTool::new(session.manager());
+    let create_tool = CreateSessionTool;
     let mut create_args = HashMap::new();
     create_args.insert("session_name".to_string(), Value::String("lifecycle_test".to_string()));
     
-    let create_result = create_tool.call(create_args).expect("Failed to create session");
-    let create_response: Value = serde_json::from_str(&create_result).expect("Invalid JSON response");
+    let create_result = create_tool.execute(create_args, session.lldb_manager()).await.expect("Failed to create session");
+    let create_result_str = match create_result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let create_response: Value = serde_json::from_str(&create_result_str).expect("Invalid JSON response");
     assert!(create_response["success"].as_bool().unwrap_or(false), "Session creation should succeed");
     
-    // Step 2: Use session (launch and break)
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    // Step 2: Use session (set breakpoint and continue)
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    session.continue_execution().expect("Failed to continue");
     
     // Step 3: Save session state
-    let save_tool = SaveSessionTool::new(session.manager());
+    let save_tool = SaveSessionTool;
     let mut save_args = HashMap::new();
     save_args.insert("session_name".to_string(), Value::String("lifecycle_test".to_string()));
     save_args.insert("include_breakpoints".to_string(), Value::Bool(true));
     
-    let save_result = save_tool.call(save_args).expect("Failed to save session");
-    let save_response: Value = serde_json::from_str(&save_result).expect("Invalid JSON response");
+    let save_result = save_tool.execute(save_args, session.lldb_manager()).await.expect("Failed to save session");
+    let save_result_str = match save_result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let save_response: Value = serde_json::from_str(&save_result_str).expect("Invalid JSON response");
     assert!(save_response["success"].as_bool().unwrap_or(false), "Session save should succeed");
     
     let saved_file = save_response["file_path"].as_str().expect("file_path should be string");
     
     // Step 4: Cleanup original session
-    let cleanup_tool = CleanupSessionTool::new(session.manager());
-    let cleanup_result = cleanup_tool.call(HashMap::new()).expect("Failed to cleanup session");
-    let cleanup_response: Value = serde_json::from_str(&cleanup_result).expect("Invalid JSON response");
+    let cleanup_tool = CleanupSessionTool;
+    let cleanup_result = cleanup_tool.execute(HashMap::new(), session.lldb_manager()).await.expect("Failed to cleanup session");
+    let cleanup_result_str = match cleanup_result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let cleanup_response: Value = serde_json::from_str(&cleanup_result_str).expect("Invalid JSON response");
     assert!(cleanup_response["success"].as_bool().unwrap_or(false), "Session cleanup should succeed");
     
     // Step 5: Load session in new manager
-    let new_session = LldbTestSession::new().expect("Failed to create new session");
-    let load_tool = LoadSessionTool::new(new_session.manager());
+    let mut new_session = TestSession::new(TestMode::Normal).expect("Failed to create new session");
+    let load_tool = LoadSessionTool;
     let mut load_args = HashMap::new();
     load_args.insert("file_path".to_string(), Value::String(saved_file.to_string()));
     
-    let load_result = load_tool.call(load_args).expect("Failed to load session");
-    let load_response: Value = serde_json::from_str(&load_result).expect("Invalid JSON response");
+    let load_result = load_tool.execute(load_args, new_session.lldb_manager()).await.expect("Failed to load session");
+    let load_result_str = match load_result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let load_response: Value = serde_json::from_str(&load_result_str).expect("Invalid JSON response");
     assert!(load_response["success"].as_bool().unwrap_or(false), "Session load should succeed");
     
     // Verify session was restored
@@ -327,18 +407,24 @@ fn test_session_lifecycle_integration() {
     let _ = fs::remove_file(saved_file);
 }
 
-#[test]
-fn test_session_management_error_handling() {
+#[tokio::test]
+async fn test_session_management_error_handling() {
     let _test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    session.start().expect("Failed to start session");
     
     // Test load session with non-existent file
-    let load_tool = LoadSessionTool::new(session.manager());
+    let load_tool = LoadSessionTool;
     let mut args_invalid = HashMap::new();
     args_invalid.insert("file_path".to_string(), Value::String("/nonexistent/session.json".to_string()));
     
-    let result_invalid = load_tool.call(args_invalid).expect("Tool should handle missing file");
-    let response_invalid: Value = serde_json::from_str(&result_invalid).expect("Invalid JSON response");
+    let result_invalid = load_tool.execute(args_invalid, session.lldb_manager()).await.expect("Tool should handle missing file");
+    let result_invalid_str = match result_invalid {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_invalid: Value = serde_json::from_str(&result_invalid_str).expect("Invalid JSON response");
     
     // Should handle missing file gracefully
     if !response_invalid["success"].as_bool().unwrap_or(false) {
@@ -346,13 +432,18 @@ fn test_session_management_error_handling() {
     }
     
     // Test save session without write permissions (if possible)
-    let save_tool = SaveSessionTool::new(session.manager());
+    let save_tool = SaveSessionTool;
     let mut args_no_perm = HashMap::new();
     args_no_perm.insert("session_name".to_string(), Value::String("test_no_permission".to_string()));
     args_no_perm.insert("save_path".to_string(), Value::String("/root/no_permission".to_string()));
     
-    let result_no_perm = save_tool.call(args_no_perm).expect("Tool should handle permission errors");
-    let response_no_perm: Value = serde_json::from_str(&result_no_perm).expect("Invalid JSON response");
+    let result_no_perm = save_tool.execute(args_no_perm, session.lldb_manager()).await.expect("Tool should handle permission errors");
+    let result_no_perm_str = match result_no_perm {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_no_perm: Value = serde_json::from_str(&result_no_perm_str).expect("Invalid JSON response");
     
     // Should handle permission error gracefully
     if !response_no_perm["success"].as_bool().unwrap_or(false) {

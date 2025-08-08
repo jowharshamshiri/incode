@@ -250,21 +250,40 @@ impl TestSession {
         let session_id = self.lldb_manager.create_session()?;
         self.session_id = Some(session_id);
         
-        // Launch the test binary
-        let pid = self.debuggee.launch()?;
+        // Use LLDB to launch the target process directly (better for breakpoints and debugging)
+        let args = vec![
+            "--mode".to_string(),
+            self.debuggee.mode.as_arg().to_string(),
+        ];
         
-        // Wait for process to be ready
-        self.debuggee.wait_for_ready(Duration::from_secs(2))?;
-        
-        // Attach LLDB to the process (unless it's a crash mode that already exited)
-        if self.debuggee.is_running() {
-            match self.lldb_manager.attach_to_process(pid) {
-                Ok(_) => println!("Successfully attached LLDB to process {}", pid),
-                Err(e) => println!("Warning: Could not attach LLDB to process {}: {}", pid, e),
+        let env = std::collections::HashMap::new();
+        match self.lldb_manager.launch_process(&self.debuggee.binary_path.to_string_lossy(), &args, &env) {
+            Ok(pid) => {
+                println!("Successfully launched target via LLDB: {}", pid);
+                Ok(pid)
+            }
+            Err(e) => {
+                println!("LLDB launch failed, falling back to attach method: {}", e);
+                
+                // Fallback: Launch the test binary separately and attach
+                let pid = self.debuggee.launch()?;
+                
+                // Wait for process to be ready
+                self.debuggee.wait_for_ready(Duration::from_secs(2))?;
+                
+                // Attach LLDB to the process
+                if self.debuggee.is_running() {
+                    match self.lldb_manager.attach_to_process(pid) {
+                        Ok(_) => println!("Successfully attached LLDB to process {}", pid),
+                        Err(e) => return Err(IncodeError::LldbOperation(
+                            format!("Could not attach LLDB to process {}: {}", pid, e)
+                        )),
+                    }
+                }
+                
+                Ok(pid)
             }
         }
-        
-        Ok(pid)
     }
     
     /// Start session for crash analysis (attach to core dump or process remains)

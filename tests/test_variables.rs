@@ -38,7 +38,7 @@ async fn test_f0035_get_variables_success() {
             println!("✅ F0035: Test session started with PID {}", pid);
             
             // Set breakpoint in function with local variables
-            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables", None);
+            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting variables in current scope
@@ -92,7 +92,7 @@ async fn test_f0035_get_variables_with_filter() {
     match session.start() {
         Ok(_pid) => {
             // Set breakpoint in function with various variables
-            let _ = session.lldb_manager().set_breakpoint("showcase_variables", None);
+            let _ = session.lldb_manager().set_breakpoint("showcase_variables");
             let _ = session.lldb_manager().continue_execution();
             
             // Test filtering variables by pattern
@@ -139,7 +139,7 @@ async fn test_f0036_get_global_variables() {
             println!("✅ F0036: Test session started with PID {}", pid);
             
             // Set breakpoint to get process into a known state
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting global variables
@@ -190,7 +190,7 @@ async fn test_f0036_get_global_variables_with_module_filter() {
     
     match session.start() {
         Ok(_pid) => {
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test filtering globals by module
@@ -236,7 +236,7 @@ async fn test_f0037_evaluate_expression() {
             println!("✅ F0037: Test session started with PID {}", pid);
             
             // Set breakpoint in function with local variables
-            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables", None);
+            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables");
             let _ = session.lldb_manager().continue_execution();
             
             // Test various expressions
@@ -248,16 +248,14 @@ async fn test_f0037_evaluate_expression() {
             ];
             
             for (expr, description) in expressions {
-                let result = session.lldb_manager().evaluate_expression(expr, None);
+                let result = session.lldb_manager().evaluate_expression(expr);
                 
                 match result {
                     Ok(eval_result) => {
-                        println!("✅ F0037: evaluate_expression succeeded for {}: {} = {} ({})", 
-                               description, eval_result.expression, eval_result.value, eval_result.result_type);
+                        println!("✅ F0037: evaluate_expression succeeded for {}: {} = {}", 
+                               description, expr, eval_result);
                         
-                        assert_eq!(eval_result.expression, expr);
-                        assert!(!eval_result.value.is_empty());
-                        assert!(!eval_result.result_type.is_empty());
+                        assert!(!eval_result.is_empty());
                     }
                     Err(e) => {
                         println!("⚠️ F0037: evaluate_expression failed for {}: {}", description, e);
@@ -288,19 +286,19 @@ async fn test_f0037_evaluate_expression_invalid() {
     
     match session.start() {
         Ok(_pid) => {
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test invalid expression
-            let result = session.lldb_manager().evaluate_expression("invalid_variable_name_12345", None);
+            let result = session.lldb_manager().evaluate_expression("invalid_variable_name_12345");
             
             match result {
                 Err(e) => {
                     println!("✅ F0037: Correctly handled invalid expression: {}", e);
                 }
                 Ok(eval_result) => {
-                    println!("⚠️ F0037: evaluate_expression unexpectedly succeeded: {} = {}", 
-                           eval_result.expression, eval_result.value);
+                    println!("⚠️ F0037: evaluate_expression unexpectedly succeeded: invalid_variable_name_12345 = {}", 
+                           eval_result);
                 }
             }
         }
@@ -330,7 +328,7 @@ async fn test_f0038_get_variable_info() {
             println!("✅ F0038: Test session started with PID {}", pid);
             
             // Set breakpoint in function with local variables
-            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables", None);
+            let _ = session.lldb_manager().set_breakpoint("demonstrate_local_variables");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting detailed info for specific variable
@@ -344,7 +342,7 @@ async fn test_f0038_get_variable_info() {
                     println!("  Value: {}", var_info.value);
                     println!("  Size: {} bytes", var_info.size);
                     println!("  Address: 0x{:x}", var_info.address);
-                    println!("  Scope: {}", var_info.scope);
+                    println!("  Location: {}", var_info.location);
                     
                     assert_eq!(var_info.name, "local_int");
                     assert!(!var_info.var_type.is_empty());
@@ -380,7 +378,7 @@ async fn test_f0038_get_variable_info_nonexistent() {
     
     match session.start() {
         Ok(_pid) => {
-            let _ = session.lldb_manager().set_breakpoint("main", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
             let _ = session.lldb_manager().continue_execution();
             
             // Test getting info for non-existent variable
@@ -422,14 +420,14 @@ async fn test_f0039_set_variable() {
             println!("✅ F0039: Test session started with PID {}", pid);
             
             // Set breakpoint in function with modifiable variables
-            let _ = session.lldb_manager().set_breakpoint("demonstrate_variable_modifications", None);
+            let _ = session.lldb_manager().set_breakpoint("demonstrate_variable_modifications");
             let _ = session.lldb_manager().continue_execution();
             
             // Get original variable value
-            let original_value = match session.lldb_manager().evaluate_expression("modification_test", None) {
+            let original_value = match session.lldb_manager().evaluate_expression("modification_test") {
                 Ok(result) => {
-                    println!("Original value of modification_test: {}", result.value);
-                    result.value
+                    println!("Original value of modification_test: {}", result);
+                    result
                 }
                 Err(e) => {
                     println!("⚠️ F0039: Could not get original value: {}", e);
@@ -443,14 +441,14 @@ async fn test_f0039_set_variable() {
             
             match result {
                 Ok(success) => {
-                    if success {
+                    if !success.is_empty() {
                         println!("✅ F0039: set_variable succeeded");
                         
                         // Verify the change
-                        match session.lldb_manager().evaluate_expression("modification_test", None) {
+                        match session.lldb_manager().evaluate_expression("modification_test") {
                             Ok(new_result) => {
-                                println!("New value of modification_test: {}", new_result.value);
-                                if new_result.value.contains(new_value) {
+                                println!("New value of modification_test: {}", new_result);
+                                if new_result.contains(new_value) {
                                     println!("✅ F0039: Variable modification verified");
                                 } else {
                                     println!("⚠️ F0039: Variable modification not reflected");
@@ -581,7 +579,7 @@ async fn test_variable_inspection_workflow() {
             println!("✅ Workflow: Test session started with PID {}", pid);
             
             // Step 1: Get to variable-rich function
-            let _ = session.lldb_manager().set_breakpoint("function_with_parameters", None);
+            let _ = session.lldb_manager().set_breakpoint("function_with_parameters");
             let _ = session.lldb_manager().continue_execution();
             
             // Step 2: List all local variables
@@ -608,7 +606,7 @@ async fn test_variable_inspection_workflow() {
                         if first_var.var_type.contains("int") {
                             match session.lldb_manager().set_variable(&first_var.name, "42") {
                                 Ok(success) => {
-                                    if success {
+                                    if !success.is_empty() {
                                         println!("✅ Workflow: Successfully modified variable '{}'", first_var.name);
                                     } else {
                                         println!("⚠️ Workflow: Variable modification reported failure");
@@ -639,9 +637,9 @@ async fn test_variable_inspection_workflow() {
             // Step 6: Evaluate some expressions
             let expressions = vec!["sizeof(int)", "1 + 1"];
             for expr in expressions {
-                match session.lldb_manager().evaluate_expression(expr, None) {
+                match session.lldb_manager().evaluate_expression(expr) {
                     Ok(result) => {
-                        println!("✅ Workflow: Expression '{}' = {}", expr, result.value);
+                        println!("✅ Workflow: Expression '{}' = {}", expr, result);
                     }
                     Err(e) => {
                         println!("⚠️ Workflow: Expression '{}' failed: {}", expr, e);

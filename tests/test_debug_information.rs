@@ -6,29 +6,35 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 mod test_setup;
-use test_setup::{TestDebuggee, TestMode, LldbTestSession};
+use test_setup::{TestDebuggee, TestMode, TestSession};
 
 use incode::tools::debug_information::{
     GetSourceCodeTool, ListFunctionsTool, GetLineInfoTool, GetDebugInfoTool
 };
-use incode::mcp_server::McpTool;
+use incode::tools::{Tool, ToolResponse};
 
-#[test]
-fn test_get_source_code_comprehensive() {
+#[tokio::test]
+async fn test_get_source_code_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::StepDebug).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::StepDebug).expect("Failed to create LLDB session");
+    let _pid = session.start().expect("Failed to start session");
     
-    // Launch and break at main
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    // Set breakpoint and continue
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    session.continue_execution().expect("Failed to continue");
     
-    let tool = GetSourceCodeTool::new(session.manager());
+    let tool = GetSourceCodeTool;
     
     // Test 1: Get source code around current location
     let mut args = HashMap::new();
     args.insert("context_lines".to_string(), Value::Number(5.into()));
     
-    let result = tool.call(args.clone()).expect("get_source_code failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args.clone(), session.lldb_manager()).await.expect("get_source_code failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate source code response structure
     assert!(response["success"].as_bool().unwrap_or(false), "get_source_code should succeed");
@@ -41,8 +47,12 @@ fn test_get_source_code_comprehensive() {
     
     // Test 2: Get source code with different context sizes
     args.insert("context_lines".to_string(), Value::Number(10.into()));
-    let result_large = tool.call(args).expect("get_source_code with larger context failed");
-    let response_large: Value = serde_json::from_str(&result_large).expect("Invalid JSON response");
+    let result_large = tool.execute(args, session.lldb_manager()).await.expect("get_source_code with larger context failed");
+    let result_large_str = match result_large {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_large: Value = serde_json::from_str(&result_large_str).expect("Invalid JSON response");
     
     let source_lines_large = response_large["source_lines"].as_array().expect("source_lines should be array");
     assert!(source_lines_large.len() >= source_lines.len(), "Larger context should return more lines");
@@ -53,8 +63,12 @@ fn test_get_source_code_comprehensive() {
     args_file.insert("line_number".to_string(), Value::Number(1.into()));
     args_file.insert("context_lines".to_string(), Value::Number(5.into()));
     
-    let result_file = tool.call(args_file).expect("get_source_code for specific file failed");
-    let response_file: Value = serde_json::from_str(&result_file).expect("Invalid JSON response");
+    let result_file = tool.execute(args_file, session.lldb_manager()).await.expect("get_source_code for specific file failed");
+    let result_file_str = match result_file {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_file: Value = serde_json::from_str(&result_file_str).expect("Invalid JSON response");
     
     assert!(response_file["success"].as_bool().unwrap_or(false), "get_source_code for file should succeed");
     assert!(response_file["file_path"].as_str().unwrap().contains("main.cpp"), "Should return main.cpp file path");
@@ -62,20 +76,26 @@ fn test_get_source_code_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_list_functions_comprehensive() {
+#[tokio::test]
+async fn test_list_functions_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    let _pid = session.start().expect("Failed to start session");
     
-    // Launch and break at main  
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    // Set breakpoint and continue
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    session.continue_execution().expect("Failed to continue");
     
-    let tool = ListFunctionsTool::new(session.manager());
+    let tool = ListFunctionsTool;
     
     // Test 1: List all functions
     let args = HashMap::new();
-    let result = tool.call(args).expect("list_functions failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("list_functions failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate functions list response
     assert!(response["success"].as_bool().unwrap_or(false), "list_functions should succeed");
@@ -95,8 +115,13 @@ fn test_list_functions_comprehensive() {
     let mut args_filter = HashMap::new();
     args_filter.insert("name_pattern".to_string(), Value::String("main".to_string()));
     
-    let result_filter = tool.call(args_filter).expect("list_functions with filter failed");
-    let response_filter: Value = serde_json::from_str(&result_filter).expect("Invalid JSON response");
+    let result_filter = tool.execute(args_filter, session.lldb_manager()).await.expect("list_functions with filter failed");
+    let result_filter_str = match result_filter {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_filter: Value = serde_json::from_str(&result_filter_str).expect("Invalid JSON response");
     
     assert!(response_filter["success"].as_bool().unwrap_or(false), "Filtered list_functions should succeed");
     let filtered_functions = response_filter["functions"].as_array().expect("functions should be array");
@@ -112,8 +137,13 @@ fn test_list_functions_comprehensive() {
     args_range.insert("include_addresses".to_string(), Value::Bool(true));
     args_range.insert("limit".to_string(), Value::Number(10.into()));
     
-    let result_range = tool.call(args_range).expect("list_functions with address range failed");
-    let response_range: Value = serde_json::from_str(&result_range).expect("Invalid JSON response");
+    let result_range = tool.execute(args_range, session.lldb_manager()).await.expect("list_functions with address range failed");
+    let result_range_str = match result_range {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_range: Value = serde_json::from_str(&result_range_str).expect("Invalid JSON response");
     
     assert!(response_range["success"].as_bool().unwrap_or(false), "Address range list_functions should succeed");
     let range_functions = response_range["functions"].as_array().expect("functions should be array");
@@ -122,20 +152,26 @@ fn test_list_functions_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]  
-fn test_get_line_info_comprehensive() {
-    let test_debuggee = TestDebuggee::new(TestMode::StepDebug).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+#[tokio::test]  
+async fn test_get_line_info_comprehensive() {
+    let _test_debuggee = TestDebuggee::new(TestMode::StepDebug).expect("Failed to create test debuggee");
+    let mut session = TestSession::new(TestMode::StepDebug).expect("Failed to create LLDB session");
+    session.start().expect("Failed to start session");
     
     // Launch and break at main
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    // session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
     
-    let tool = GetLineInfoTool::new(session.manager());
+    let tool = GetLineInfoTool;
     
     // Test 1: Get line info for current location
     let args = HashMap::new();
-    let result = tool.call(args).expect("get_line_info failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("get_line_info failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate line info response
     assert!(response["success"].as_bool().unwrap_or(false), "get_line_info should succeed");
@@ -155,8 +191,13 @@ fn test_get_line_info_comprehensive() {
     let mut args_addr = HashMap::new();
     args_addr.insert("address".to_string(), Value::String(current_address.to_string()));
     
-    let result_addr = tool.call(args_addr).expect("get_line_info for address failed");
-    let response_addr: Value = serde_json::from_str(&result_addr).expect("Invalid JSON response");
+    let result_addr = tool.execute(args_addr, session.lldb_manager()).await.expect("get_line_info for address failed");
+    let result_addr_str = match result_addr {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_addr: Value = serde_json::from_str(&result_addr_str).expect("Invalid JSON response");
     
     assert!(response_addr["success"].as_bool().unwrap_or(false), "Address get_line_info should succeed");
     assert_eq!(response_addr["address"].as_str().unwrap(), current_address, "Should return same address");
@@ -165,8 +206,13 @@ fn test_get_line_info_comprehensive() {
     let mut args_context = HashMap::new();
     args_context.insert("include_context".to_string(), Value::Bool(true));
     
-    let result_context = tool.call(args_context).expect("get_line_info with context failed");
-    let response_context: Value = serde_json::from_str(&result_context).expect("Invalid JSON response");
+    let result_context = tool.execute(args_context, session.lldb_manager()).await.expect("get_line_info with context failed");
+    let result_context_str = match result_context {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_context: Value = serde_json::from_str(&result_context_str).expect("Invalid JSON response");
     
     assert!(response_context["success"].as_bool().unwrap_or(false), "Context get_line_info should succeed");
     if let Some(context) = response_context.get("context") {
@@ -176,20 +222,26 @@ fn test_get_line_info_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_get_debug_info_comprehensive() {
-    let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+#[tokio::test]
+async fn test_get_debug_info_comprehensive() {
+    let _test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    session.start().expect("Failed to start session");
     
     // Launch and analyze debug info
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    // session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
     
-    let tool = GetDebugInfoTool::new(session.manager());
+    let tool = GetDebugInfoTool;
     
     // Test 1: Get comprehensive debug info
     let args = HashMap::new();
-    let result = tool.call(args).expect("get_debug_info failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("get_debug_info failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate debug info response structure
     assert!(response["success"].as_bool().unwrap_or(false), "get_debug_info should succeed");
@@ -214,8 +266,13 @@ fn test_get_debug_info_comprehensive() {
     args_sections.insert("include_symbols".to_string(), Value::Bool(true));
     args_sections.insert("include_types".to_string(), Value::Bool(true));
     
-    let result_sections = tool.call(args_sections).expect("get_debug_info with sections failed");
-    let response_sections: Value = serde_json::from_str(&result_sections).expect("Invalid JSON response");
+    let result_sections = tool.execute(args_sections, session.lldb_manager()).await.expect("get_debug_info with sections failed");
+    let result_sections_str = match result_sections {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_sections: Value = serde_json::from_str(&result_sections_str).expect("Invalid JSON response");
     
     assert!(response_sections["success"].as_bool().unwrap_or(false), "Sections debug info should succeed");
     
@@ -231,8 +288,13 @@ fn test_get_debug_info_comprehensive() {
     let mut args_summary = HashMap::new();
     args_summary.insert("summary_only".to_string(), Value::Bool(true));
     
-    let result_summary = tool.call(args_summary).expect("get_debug_info summary failed");
-    let response_summary: Value = serde_json::from_str(&result_summary).expect("Invalid JSON response");
+    let result_summary = tool.execute(args_summary, session.lldb_manager()).await.expect("get_debug_info summary failed");
+    let result_summary_str = match result_summary {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_summary: Value = serde_json::from_str(&result_summary_str).expect("Invalid JSON response");
     
     assert!(response_summary["success"].as_bool().unwrap_or(false), "Summary debug info should succeed");
     
@@ -243,21 +305,27 @@ fn test_get_debug_info_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_debug_information_error_handling() {
-    let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+#[tokio::test]
+async fn test_debug_information_error_handling() {
+    let _test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    session.start().expect("Failed to start session");
     
     // Launch process for error testing
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    // session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
     
     // Test invalid address for get_line_info
-    let tool_line = GetLineInfoTool::new(session.manager());
+    let tool_line = GetLineInfoTool;
     let mut args_invalid = HashMap::new();
     args_invalid.insert("address".to_string(), Value::String("0xdeadbeef".to_string()));
     
-    let result = tool_line.call(args_invalid).expect("Tool should handle invalid address gracefully");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool_line.execute(args_invalid, session.lldb_manager()).await.expect("Tool should handle invalid address gracefully");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Should handle error gracefully
     if !response["success"].as_bool().unwrap_or(false) {
@@ -265,13 +333,18 @@ fn test_debug_information_error_handling() {
     }
     
     // Test invalid file path for get_source_code  
-    let tool_source = GetSourceCodeTool::new(session.manager());
+    let tool_source = GetSourceCodeTool;
     let mut args_invalid_file = HashMap::new();
     args_invalid_file.insert("file_path".to_string(), Value::String("/nonexistent/file.cpp".to_string()));
     args_invalid_file.insert("line_number".to_string(), Value::Number(1.into()));
     
-    let result_file = tool_source.call(args_invalid_file).expect("Tool should handle invalid file gracefully");
-    let response_file: Value = serde_json::from_str(&result_file).expect("Invalid JSON response");
+    let result_file = tool_source.execute(args_invalid_file, session.lldb_manager()).await.expect("Tool should handle invalid file gracefully");
+    let result_file_str = match result_file {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_file: Value = serde_json::from_str(&result_file_str).expect("Invalid JSON response");
     
     // Should handle file not found gracefully
     if !response_file["success"].as_bool().unwrap_or(false) {

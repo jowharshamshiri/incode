@@ -40,7 +40,7 @@ async fn test_f0014_set_breakpoint_by_function() {
             println!("✅ F0014: Test session started with PID {}", pid);
             
             // Test setting breakpoint by function name
-            let result = session.lldb_manager().set_breakpoint("main", None);
+            let result = session.lldb_manager().set_breakpoint("main");
             
             match result {
                 Ok(bp_id) => {
@@ -79,7 +79,7 @@ async fn test_f0014_set_breakpoint_multiple_functions() {
             let mut breakpoint_ids = Vec::new();
             
             for function in &functions {
-                match session.lldb_manager().set_breakpoint(function, None) {
+                match session.lldb_manager().set_breakpoint(function) {
                     Ok(bp_id) => {
                         println!("✅ F0014: Breakpoint set on {}, ID: {}", function, bp_id);
                         breakpoint_ids.push(bp_id);
@@ -116,7 +116,7 @@ async fn test_f0014_set_breakpoint_invalid_function() {
     
     match session.start() {
         Ok(_pid) => {
-            let result = session.lldb_manager().set_breakpoint("nonexistent_function_12345", None);
+            let result = session.lldb_manager().set_breakpoint("nonexistent_function_12345");
             
             match result {
                 Err(e) => {
@@ -153,11 +153,11 @@ async fn test_f0015_set_watchpoint() {
             println!("✅ F0015: Test session started with PID {}", pid);
             
             // Set breakpoint to get to a predictable state
-            let _ = session.lldb_manager().set_breakpoint("create_global_patterns", None);
+            let _ = session.lldb_manager().set_breakpoint("create_global_patterns");
             let _ = session.lldb_manager().continue_execution();
             
             // Test setting watchpoint on global variable
-            let result = session.lldb_manager().set_watchpoint("global_buffer", "write", 4);
+            let result = session.lldb_manager().set_watchpoint(0x1000, 4, false, true); // address, size, read, write
             
             match result {
                 Ok(wp_id) => {
@@ -193,8 +193,8 @@ async fn test_f0016_list_breakpoints() {
     match session.start() {
         Ok(_pid) => {
             // Set some breakpoints first
-            let _ = session.lldb_manager().set_breakpoint("main", None);
-            let _ = session.lldb_manager().set_breakpoint("showcase_variables", None);
+            let _ = session.lldb_manager().set_breakpoint("main");
+            let _ = session.lldb_manager().set_breakpoint("showcase_variables");
             
             // Test listing breakpoints
             let result = session.lldb_manager().list_breakpoints();
@@ -275,7 +275,7 @@ async fn test_f0017_delete_breakpoint() {
     match session.start() {
         Ok(_pid) => {
             // Set a breakpoint first
-            let bp_id = match session.lldb_manager().set_breakpoint("main", None) {
+            let bp_id = match session.lldb_manager().set_breakpoint("main") {
                 Ok(id) => {
                     println!("✅ F0017: Created test breakpoint with ID {}", id);
                     id
@@ -372,7 +372,7 @@ async fn test_f0018_enable_breakpoint() {
     match session.start() {
         Ok(_pid) => {
             // Set and then disable a breakpoint
-            let bp_id = match session.lldb_manager().set_breakpoint("main", None) {
+            let bp_id = match session.lldb_manager().set_breakpoint("main") {
                 Ok(id) => id,
                 Err(e) => {
                     println!("⚠️ F0018: Could not create test breakpoint: {}", e);
@@ -419,7 +419,7 @@ async fn test_f0019_disable_breakpoint() {
     match session.start() {
         Ok(_pid) => {
             // Set a breakpoint first
-            let bp_id = match session.lldb_manager().set_breakpoint("main", None) {
+            let bp_id = match session.lldb_manager().set_breakpoint("main") {
                 Ok(id) => id,
                 Err(e) => {
                     println!("⚠️ F0019: Could not create test breakpoint: {}", e);
@@ -483,8 +483,7 @@ async fn test_f0020_set_conditional_breakpoint() {
             // Test setting conditional breakpoint
             let result = session.lldb_manager().set_conditional_breakpoint(
                 "main", 
-                "argc > 1",
-                None
+                "argc > 1"
             );
             
             match result {
@@ -521,7 +520,7 @@ async fn test_f0021_breakpoint_commands() {
     match session.start() {
         Ok(_pid) => {
             // Set a breakpoint first
-            let bp_id = match session.lldb_manager().set_breakpoint("main", None) {
+            let bp_id = match session.lldb_manager().set_breakpoint("main") {
                 Ok(id) => id,
                 Err(e) => {
                     println!("⚠️ F0021: Could not create test breakpoint: {}", e);
@@ -531,7 +530,7 @@ async fn test_f0021_breakpoint_commands() {
             
             // Test setting breakpoint commands
             let commands = vec!["print argc".to_string(), "bt".to_string()];
-            let result = session.lldb_manager().set_breakpoint_commands(bp_id, commands);
+            let result = session.lldb_manager().set_breakpoint_commands(bp_id, &commands);
             
             match result {
                 Ok(_) => {
@@ -571,7 +570,7 @@ async fn test_breakpoint_management_workflow() {
             let bp_ids = TestUtils::get_test_breakpoint_locations()
                 .into_iter()
                 .filter_map(|func| {
-                    match session.lldb_manager().set_breakpoint(func, None) {
+                    match session.lldb_manager().set_breakpoint(func) {
                         Ok(id) => {
                             println!("✅ Workflow: Set breakpoint on {}, ID: {}", func, id);
                             Some(id)

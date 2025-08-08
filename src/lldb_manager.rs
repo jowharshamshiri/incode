@@ -354,8 +354,11 @@ pub struct LldbManager {
     current_thread: Option<SBThreadRef>,
     current_thread_id: Option<u32>,
     current_frame_index: u32,
+    cleaned_up: bool,
 }
 
+// SAFETY: LLDB manager uses Mutex for internal state synchronization
+// The LLDB C API is accessed through single instance with proper locking
 unsafe impl Send for LldbManager {}
 unsafe impl Sync for LldbManager {}
 
@@ -395,6 +398,7 @@ impl LldbManager {
             current_thread: None,
             current_thread_id: None,
             current_frame_index: 0,
+            cleaned_up: false,
         })
     }
 
@@ -605,8 +609,8 @@ impl LldbManager {
         for arg in args {
             let arg_cstr = std::ffi::CString::new(arg.as_str())
                 .map_err(|_| IncodeError::lldb_op("Invalid argument"))?;
-            argv_ptrs.push(arg_cstr.as_ptr());
             arg_cstrs.push(arg_cstr);
+            argv_ptrs.push(arg_cstrs.last().unwrap().as_ptr());
         }
         argv_ptrs.push(std::ptr::null()); // NULL terminate
 
@@ -1029,8 +1033,17 @@ impl LldbManager {
             info!("Successfully created breakpoint at {}:{}", file, line);
             Ok(2) // TODO: Return actual breakpoint ID
         } else {
-            // Function name breakpoint - TODO: Implement function breakpoints
-            Err(IncodeError::not_implemented("Function name breakpoints"))
+            // Function name breakpoint
+            let func_name = std::ffi::CString::new(location)
+                .map_err(|_| IncodeError::lldb_op("Invalid function name"))?;
+            
+            let breakpoint = unsafe { SBTargetBreakpointCreateByName(target, func_name.as_ptr(), std::ptr::null()) };
+            if breakpoint.is_null() {
+                return Err(IncodeError::lldb_op(format!("Failed to create breakpoint for function: {}", location)));
+            }
+
+            info!("Successfully created breakpoint for function: {}", location);
+            Ok(3) // TODO: Return actual breakpoint ID
         }
     }
 
@@ -2905,14 +2918,24 @@ impl LldbManager {
 
     /// Cleanup resources
     pub fn cleanup(&mut self) -> IncodeResult<()> {
+        if self.cleaned_up {
+            return Ok(());
+        }
+        
         info!("Cleaning up LLDB Manager resources");
         
-        // Cleanup LLDB resources
+        // Clear child objects first to avoid dangling references
+        self.current_process = None;
+        self.current_target = None;
+        self.current_thread_id = None;
+        
+        // Cleanup LLDB resources in proper order
         if let Some(debugger) = self.debugger {
             unsafe {
                 SBDebuggerDestroy(debugger);
                 SBDebuggerTerminate();
             }
+            self.debugger = None;
         }
 
         // Clear sessions
@@ -2920,14 +2943,17 @@ impl LldbManager {
         sessions.clear();
         self.current_session = None;
         
+        self.cleaned_up = true;
         Ok(())
     }
 }
 
 impl Drop for LldbManager {
     fn drop(&mut self) {
-        if let Err(e) = self.cleanup() {
-            error!("Error during LLDB Manager cleanup: {}", e);
+        if !self.cleaned_up {
+            if let Err(e) = self.cleanup() {
+                error!("Error during LLDB Manager cleanup: {}", e);
+            }
         }
     }
 }

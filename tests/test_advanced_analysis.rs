@@ -8,28 +8,32 @@ use std::path::Path;
 use serde_json::Value;
 
 mod test_setup;
-use test_setup::{TestDebuggee, TestMode, LldbTestSession};
+use test_setup::{TestDebuggee, TestMode, TestSession};
 
 use incode::tools::advanced_analysis::{AnalyzeCrashTool, GenerateCoreDumpTool};
-use incode::mcp_server::McpTool;
+use incode::tools::{Tool, ToolResponse};
 
-#[test]
-fn test_analyze_crash_comprehensive() {
+#[tokio::test]
+async fn test_analyze_crash_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::CrashSegv).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::CrashSegv).expect("Failed to create LLDB session");
     
-    // Launch process and let it crash
-    session.launch_process(&test_debuggee).expect("Failed to launch process");
+    // Start crash analysis session (this will launch and let the process crash)
+    session.start_crash_analysis().expect("Failed to start crash analysis");
     
     // Wait a moment for crash to occur
     std::thread::sleep(std::time::Duration::from_millis(500));
     
-    let tool = AnalyzeCrashTool::new(session.manager());
+    let tool = AnalyzeCrashTool;
     
     // Test 1: Basic crash analysis
     let args = HashMap::new();
-    let result = tool.call(args).expect("analyze_crash failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("analyze_crash failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate crash analysis response
     assert!(response["success"].as_bool().unwrap_or(false), "analyze_crash should succeed");
@@ -50,8 +54,12 @@ fn test_analyze_crash_comprehensive() {
     args_detailed.insert("include_memory_analysis".to_string(), Value::Bool(true));
     args_detailed.insert("include_register_analysis".to_string(), Value::Bool(true));
     
-    let result_detailed = tool.call(args_detailed).expect("analyze_crash detailed failed");
-    let response_detailed: Value = serde_json::from_str(&result_detailed).expect("Invalid JSON response");
+    let result_detailed = tool.execute(args_detailed, session.lldb_manager()).await.expect("analyze_crash detailed failed");
+    let result_detailed_str = match result_detailed {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_detailed: Value = serde_json::from_str(&result_detailed_str).expect("Invalid JSON response");
     
     assert!(response_detailed["success"].as_bool().unwrap_or(false), "Detailed crash analysis should succeed");
     
@@ -71,8 +79,12 @@ fn test_analyze_crash_comprehensive() {
     args_root_cause.insert("detect_root_cause".to_string(), Value::Bool(true));
     args_root_cause.insert("analyze_code_context".to_string(), Value::Bool(true));
     
-    let result_root_cause = tool.call(args_root_cause).expect("analyze_crash root cause failed");
-    let response_root_cause: Value = serde_json::from_str(&result_root_cause).expect("Invalid JSON response");
+    let result_root_cause = tool.execute(args_root_cause, session.lldb_manager()).await.expect("analyze_crash root cause failed");
+    let result_root_cause_str = match result_root_cause {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_root_cause: Value = serde_json::from_str(&result_root_cause_str).expect("Invalid JSON response");
     
     assert!(response_root_cause["success"].as_bool().unwrap_or(false), "Root cause analysis should succeed");
     
@@ -87,15 +99,17 @@ fn test_analyze_crash_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test] 
-fn test_generate_core_dump_comprehensive() {
+#[tokio::test]
+async fn test_generate_core_dump_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    let _pid = session.start().expect("Failed to start session");
     
-    // Launch and break for core dump testing
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    // Set a breakpoint to have an active debugging session
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    session.continue_execution().expect("Failed to continue");
     
-    let tool = GenerateCoreDumpTool::new(session.manager());
+    let tool = GenerateCoreDumpTool;
     
     // Test 1: Basic core dump generation
     let temp_dir = std::env::temp_dir().join("incode_core_dumps");
@@ -104,8 +118,12 @@ fn test_generate_core_dump_comprehensive() {
     let mut args = HashMap::new();
     args.insert("output_path".to_string(), Value::String(temp_dir.join("test_core.dump").to_string_lossy().to_string()));
     
-    let result = tool.call(args).expect("generate_core_dump failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("generate_core_dump failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate core dump response
     assert!(response["success"].as_bool().unwrap_or(false), "generate_core_dump should succeed");
@@ -125,8 +143,12 @@ fn test_generate_core_dump_comprehensive() {
     args_compressed.insert("compress".to_string(), Value::Bool(true));
     args_compressed.insert("compression_level".to_string(), Value::Number(6.into()));
     
-    let result_compressed = tool.call(args_compressed).expect("generate_core_dump compressed failed");
-    let response_compressed: Value = serde_json::from_str(&result_compressed).expect("Invalid JSON response");
+    let result_compressed = tool.execute(args_compressed, session.lldb_manager()).await.expect("generate_core_dump compressed failed");
+    let result_compressed_str = match result_compressed {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_compressed: Value = serde_json::from_str(&result_compressed_str).expect("Invalid JSON response");
     
     assert!(response_compressed["success"].as_bool().unwrap_or(false), "Compressed core dump should succeed");
     
@@ -144,8 +166,12 @@ fn test_generate_core_dump_comprehensive() {
     args_format.insert("format".to_string(), Value::String("elf".to_string()));
     args_format.insert("include_metadata".to_string(), Value::Bool(true));
     
-    let result_format = tool.call(args_format).expect("generate_core_dump format failed");
-    let response_format: Value = serde_json::from_str(&result_format).expect("Invalid JSON response");
+    let result_format = tool.execute(args_format, session.lldb_manager()).await.expect("generate_core_dump format failed");
+    let result_format_str = match result_format {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_format: Value = serde_json::from_str(&result_format_str).expect("Invalid JSON response");
     
     assert!(response_format["success"].as_bool().unwrap_or(false), "Format core dump should succeed");
     
@@ -165,8 +191,12 @@ fn test_generate_core_dump_comprehensive() {
     args_selective.insert("include_registers".to_string(), Value::Bool(true));
     args_selective.insert("include_threads".to_string(), Value::Bool(false)); // Selective exclusion
     
-    let result_selective = tool.call(args_selective).expect("generate_core_dump selective failed");
-    let response_selective: Value = serde_json::from_str(&result_selective).expect("Invalid JSON response");
+    let result_selective = tool.execute(args_selective, session.lldb_manager()).await.expect("generate_core_dump selective failed");
+    let result_selective_str = match result_selective {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_selective: Value = serde_json::from_str(&result_selective_str).expect("Invalid JSON response");
     
     assert!(response_selective["success"].as_bool().unwrap_or(false), "Selective core dump should succeed");
     
@@ -185,26 +215,30 @@ fn test_generate_core_dump_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_crash_analysis_with_stack_overflow() {
+#[tokio::test]
+async fn test_crash_analysis_with_stack_overflow() {
     let test_debuggee = TestDebuggee::new(TestMode::CrashStack).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::CrashStack).expect("Failed to create LLDB session");
     
-    // Launch process and let it crash with stack overflow
-    session.launch_process(&test_debuggee).expect("Failed to launch process");
+    // Start crash analysis session (this will launch and let the process crash)
+    session.start_crash_analysis().expect("Failed to start crash analysis");
     
     // Wait for stack overflow crash
     std::thread::sleep(std::time::Duration::from_millis(1000));
     
-    let tool = AnalyzeCrashTool::new(session.manager());
+    let tool = AnalyzeCrashTool;
     
     // Test stack overflow specific analysis
     let mut args = HashMap::new();
     args.insert("detect_stack_overflow".to_string(), Value::Bool(true));
     args.insert("analyze_recursion".to_string(), Value::Bool(true));
     
-    let result = tool.call(args).expect("Stack overflow analysis failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("Stack overflow analysis failed");
+    let result_str = match result {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Should detect stack-related issues
     assert!(response["success"].as_bool().unwrap_or(false), "Stack overflow analysis should succeed");
@@ -234,15 +268,17 @@ fn test_crash_analysis_with_stack_overflow() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_core_dump_file_formats() {
+#[tokio::test]
+async fn test_core_dump_file_formats() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
+    let _pid = session.start().expect("Failed to start session");
     
-    // Launch for format testing
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    // Set a breakpoint to have an active debugging session
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint");
+    session.continue_execution().expect("Failed to continue");
     
-    let tool = GenerateCoreDumpTool::new(session.manager());
+    let tool = GenerateCoreDumpTool;
     let temp_dir = std::env::temp_dir().join("incode_format_test");
     fs::create_dir_all(&temp_dir).expect("Should create format test directory");
     
@@ -256,13 +292,17 @@ fn test_core_dump_file_formats() {
         ));
         args.insert("format".to_string(), Value::String(format.to_string()));
         
-        let result = tool.call(args).expect(&format!("Core dump {} format failed", format));
-        let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+        let result = tool.execute(args, session.lldb_manager()).await.expect("Core dump format failed");
+        let result_str = match result {
+            ToolResponse::Success(s) => s,
+            _ => panic!("Expected success response"),
+        };
+        let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
         
         // Should succeed or gracefully handle unsupported formats
         if response["success"].as_bool().unwrap_or(false) {
             let dump_path = response["core_dump_path"].as_str().expect("core_dump_path should be string");
-            assert!(Path::new(dump_path).exists(), &format!("{} format dump should exist", format));
+            assert!(Path::new(dump_path).exists(), "format dump should exist");
             
             // Cleanup
             let _ = fs::remove_file(dump_path);
@@ -278,15 +318,19 @@ fn test_core_dump_file_formats() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_advanced_analysis_error_handling() {
+#[tokio::test]
+async fn test_advanced_analysis_error_handling() {
     let _test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
     
     // Test crash analysis without crashed process
-    let crash_tool = AnalyzeCrashTool::new(session.manager());
-    let result_no_crash = crash_tool.call(HashMap::new()).expect("Tool should handle no crash gracefully");
-    let response_no_crash: Value = serde_json::from_str(&result_no_crash).expect("Invalid JSON response");
+    let crash_tool = AnalyzeCrashTool;
+    let result_no_crash = crash_tool.execute(HashMap::new(), session.lldb_manager()).await.expect("Tool should handle no crash gracefully");
+    let result_no_crash_str = match result_no_crash {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_no_crash: Value = serde_json::from_str(&result_no_crash_str).expect("Invalid JSON response");
     
     // Should handle no crash gracefully
     if !response_no_crash["success"].as_bool().unwrap_or(false) {
@@ -299,12 +343,16 @@ fn test_advanced_analysis_error_handling() {
     }
     
     // Test core dump with invalid path
-    let dump_tool = GenerateCoreDumpTool::new(session.manager());
+    let dump_tool = GenerateCoreDumpTool;
     let mut args_invalid = HashMap::new();
     args_invalid.insert("output_path".to_string(), Value::String("/invalid/path/core.dump".to_string()));
     
-    let result_invalid = dump_tool.call(args_invalid).expect("Tool should handle invalid path");
-    let response_invalid: Value = serde_json::from_str(&result_invalid).expect("Invalid JSON response");
+    let result_invalid = dump_tool.execute(args_invalid, session.lldb_manager()).await.expect("Tool should handle invalid path");
+    let result_invalid_str = match result_invalid {
+        ToolResponse::Success(s) => s,
+        _ => panic!("Expected success response"),
+    };
+    let response_invalid: Value = serde_json::from_str(&result_invalid_str).expect("Invalid JSON response");
     
     // Should handle invalid path gracefully
     if !response_invalid["success"].as_bool().unwrap_or(false) {
@@ -316,8 +364,13 @@ fn test_advanced_analysis_error_handling() {
     let temp_path = std::env::temp_dir().join("test_no_process.dump");
     args_no_process.insert("output_path".to_string(), Value::String(temp_path.to_string_lossy().to_string()));
     
-    let result_no_process = dump_tool.call(args_no_process).expect("Tool should handle no process");
-    let response_no_process: Value = serde_json::from_str(&result_no_process).expect("Invalid JSON response");
+    let result_no_process = dump_tool.execute(args_no_process, session.lldb_manager()).await.expect("Tool should handle no process");
+    let result_no_process_str = match result_no_process {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let response_no_process: Value = serde_json::from_str(&result_no_process_str).expect("Invalid JSON response");
     
     // Should handle no process gracefully
     if !response_no_process["success"].as_bool().unwrap_or(false) {
@@ -328,34 +381,43 @@ fn test_advanced_analysis_error_handling() {
     let _ = fs::remove_file(temp_path);
 }
 
-#[test]
-fn test_advanced_analysis_integration() {
-    let test_debuggee = TestDebuggee::new(TestMode::CrashSegv).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+#[tokio::test]
+async fn test_advanced_analysis_integration() {
+    let _test_debuggee = TestDebuggee::new(TestMode::CrashSegv).expect("Failed to create test debuggee");
+    let mut session = TestSession::new(TestMode::CrashSegv).expect("Failed to create LLDB session");
+    session.start().expect("Failed to start session");
     
     // Test integration: crash analysis followed by core dump
-    session.launch_process(&test_debuggee).expect("Failed to launch process");
-    
     // Wait for crash
     std::thread::sleep(std::time::Duration::from_millis(500));
     
     // Step 1: Analyze the crash
-    let crash_tool = AnalyzeCrashTool::new(session.manager());
-    let crash_result = crash_tool.call(HashMap::new()).expect("Crash analysis failed");
-    let crash_response: Value = serde_json::from_str(&crash_result).expect("Invalid JSON response");
+    let crash_tool = AnalyzeCrashTool;
+    let crash_result = crash_tool.execute(HashMap::new(), session.lldb_manager()).await.expect("Crash analysis failed");
+    let crash_result_str = match crash_result {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let crash_response: Value = serde_json::from_str(&crash_result_str).expect("Invalid JSON response");
     
     assert!(crash_response["success"].as_bool().unwrap_or(false), "Crash analysis should succeed");
     
     // Step 2: Generate core dump of crashed process
-    let dump_tool = GenerateCoreDumpTool::new(session.manager());
+    let dump_tool = GenerateCoreDumpTool;
     let temp_path = std::env::temp_dir().join("integrated_crash_dump.core");
     
     let mut dump_args = HashMap::new();
     dump_args.insert("output_path".to_string(), Value::String(temp_path.to_string_lossy().to_string()));
     dump_args.insert("include_crash_context".to_string(), Value::Bool(true));
     
-    let dump_result = dump_tool.call(dump_args).expect("Core dump of crashed process failed");
-    let dump_response: Value = serde_json::from_str(&dump_result).expect("Invalid JSON response");
+    let dump_result = dump_tool.execute(dump_args, session.lldb_manager()).await.expect("Core dump of crashed process failed");
+    let dump_result_str = match dump_result {
+        ToolResponse::Success(s) => s,
+        ToolResponse::Error(e) => e,
+        ToolResponse::Json(v) => v.to_string(),
+    };
+    let dump_response: Value = serde_json::from_str(&dump_result_str).expect("Invalid JSON response");
     
     // Core dump of crashed process should work
     if dump_response["success"].as_bool().unwrap_or(false) {

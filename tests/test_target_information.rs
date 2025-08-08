@@ -6,25 +6,31 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 mod test_setup;
-use test_setup::{TestDebuggee, TestMode, LldbTestSession};
+use test_setup::{TestDebuggee, TestMode, TestSession};
 
 use incode::tools::target_info::{GetTargetInfoTool, GetPlatformInfoTool, ListModulesTool};
-use incode::mcp_server::McpTool;
+use incode::tools::{Tool, ToolResponse};
 
-#[test]
-fn test_get_target_info_comprehensive() {
+#[tokio::test]
+async fn test_get_target_info_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
     
     // Launch process for target analysis
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    session.start().expect("Failed to start debugging session");
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint at main");
     
-    let tool = GetTargetInfoTool::new(session.manager());
+    let tool = GetTargetInfoTool;
     
     // Test 1: Get comprehensive target info
     let args = HashMap::new();
-    let result = tool.call(args).expect("get_target_info failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("get_target_info failed");
+    let result_str = match result {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate target info response structure
     assert!(response["success"].as_bool().unwrap_or(false), "get_target_info should succeed");
@@ -48,8 +54,13 @@ fn test_get_target_info_comprehensive() {
     let mut args_metadata = HashMap::new();
     args_metadata.insert("include_metadata".to_string(), Value::Bool(true));
     
-    let result_metadata = tool.call(args_metadata).expect("get_target_info with metadata failed");
-    let response_metadata: Value = serde_json::from_str(&result_metadata).expect("Invalid JSON response");
+    let result_metadata = tool.execute(args_metadata, session.lldb_manager()).await.expect("get_target_info with metadata failed");
+    let result_metadata_str = match result_metadata {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_metadata: Value = serde_json::from_str(&result_metadata_str).expect("Invalid JSON response");
     
     assert!(response_metadata["success"].as_bool().unwrap_or(false), "Metadata target info should succeed");
     
@@ -66,8 +77,13 @@ fn test_get_target_info_comprehensive() {
     let mut args_symbols = HashMap::new();
     args_symbols.insert("analyze_symbols".to_string(), Value::Bool(true));
     
-    let result_symbols = tool.call(args_symbols).expect("get_target_info with symbols failed");
-    let response_symbols: Value = serde_json::from_str(&result_symbols).expect("Invalid JSON response");
+    let result_symbols = tool.execute(args_symbols, session.lldb_manager()).await.expect("get_target_info with symbols failed");
+    let result_symbols_str = match result_symbols {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_symbols: Value = serde_json::from_str(&result_symbols_str).expect("Invalid JSON response");
     
     assert!(response_symbols["success"].as_bool().unwrap_or(false), "Symbols target info should succeed");
     
@@ -82,20 +98,26 @@ fn test_get_target_info_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_get_platform_info_comprehensive() {
+#[tokio::test]
+async fn test_get_platform_info_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
     
     // Launch process for platform analysis
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    session.start().expect("Failed to start debugging session");
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint at main");
     
-    let tool = GetPlatformInfoTool::new(session.manager());
+    let tool = GetPlatformInfoTool;
     
     // Test 1: Get basic platform info
     let args = HashMap::new();
-    let result = tool.call(args).expect("get_platform_info failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("get_platform_info failed");
+    let result_str = match result {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate platform info response structure
     assert!(response["success"].as_bool().unwrap_or(false), "get_platform_info should succeed");
@@ -118,8 +140,13 @@ fn test_get_platform_info_comprehensive() {
     let mut args_dev = HashMap::new();
     args_dev.insert("include_development_info".to_string(), Value::Bool(true));
     
-    let result_dev = tool.call(args_dev).expect("get_platform_info with dev info failed");
-    let response_dev: Value = serde_json::from_str(&result_dev).expect("Invalid JSON response");
+    let result_dev = tool.execute(args_dev, session.lldb_manager()).await.expect("get_platform_info with dev info failed");
+    let result_dev_str = match result_dev {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_dev: Value = serde_json::from_str(&result_dev_str).expect("Invalid JSON response");
     
     assert!(response_dev["success"].as_bool().unwrap_or(false), "Dev platform info should succeed");
     
@@ -135,8 +162,13 @@ fn test_get_platform_info_comprehensive() {
     let mut args_caps = HashMap::new();
     args_caps.insert("include_capabilities".to_string(), Value::Bool(true));
     
-    let result_caps = tool.call(args_caps).expect("get_platform_info with capabilities failed");
-    let response_caps: Value = serde_json::from_str(&result_caps).expect("Invalid JSON response");
+    let result_caps = tool.execute(args_caps, session.lldb_manager()).await.expect("get_platform_info with capabilities failed");
+    let result_caps_str = match result_caps {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_caps: Value = serde_json::from_str(&result_caps_str).expect("Invalid JSON response");
     
     assert!(response_caps["success"].as_bool().unwrap_or(false), "Capabilities platform info should succeed");
     
@@ -151,20 +183,26 @@ fn test_get_platform_info_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]  
-fn test_list_modules_comprehensive() {
+#[tokio::test]
+async fn test_list_modules_comprehensive() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
     
     // Launch process for module analysis
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    session.start().expect("Failed to start debugging session");
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint at main");
     
-    let tool = ListModulesTool::new(session.manager());
+    let tool = ListModulesTool;
     
     // Test 1: List all modules
     let args = HashMap::new();
-    let result = tool.call(args).expect("list_modules failed");
-    let response: Value = serde_json::from_str(&result).expect("Invalid JSON response");
+    let result = tool.execute(args, session.lldb_manager()).await.expect("list_modules failed");
+    let result_str = match result {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
     // Validate modules list response
     assert!(response["success"].as_bool().unwrap_or(false), "list_modules should succeed");
@@ -192,8 +230,13 @@ fn test_list_modules_comprehensive() {
     let mut args_debug = HashMap::new();
     args_debug.insert("debug_symbols_only".to_string(), Value::Bool(true));
     
-    let result_debug = tool.call(args_debug).expect("list_modules with debug filter failed");
-    let response_debug: Value = serde_json::from_str(&result_debug).expect("Invalid JSON response");
+    let result_debug = tool.execute(args_debug, session.lldb_manager()).await.expect("list_modules with debug filter failed");
+    let result_debug_str = match result_debug {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_debug: Value = serde_json::from_str(&result_debug_str).expect("Invalid JSON response");
     
     assert!(response_debug["success"].as_bool().unwrap_or(false), "Debug modules should succeed");
     let debug_modules = response_debug["modules"].as_array().expect("modules should be array");
@@ -208,8 +251,13 @@ fn test_list_modules_comprehensive() {
     let mut args_aslr = HashMap::new();
     args_aslr.insert("include_aslr_slide".to_string(), Value::Bool(true));
     
-    let result_aslr = tool.call(args_aslr).expect("list_modules with ASLR failed");
-    let response_aslr: Value = serde_json::from_str(&result_aslr).expect("Invalid JSON response");
+    let result_aslr = tool.execute(args_aslr, session.lldb_manager()).await.expect("list_modules with ASLR failed");
+    let result_aslr_str = match result_aslr {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_aslr: Value = serde_json::from_str(&result_aslr_str).expect("Invalid JSON response");
     
     assert!(response_aslr["success"].as_bool().unwrap_or(false), "ASLR modules should succeed");
     let aslr_modules = response_aslr["modules"].as_array().expect("modules should be array");
@@ -228,8 +276,13 @@ fn test_list_modules_comprehensive() {
     let mut args_symbols = HashMap::new();
     args_symbols.insert("include_symbol_count".to_string(), Value::Bool(true));
     
-    let result_symbols = tool.call(args_symbols).expect("list_modules with symbols failed");
-    let response_symbols: Value = serde_json::from_str(&result_symbols).expect("Invalid JSON response");
+    let result_symbols = tool.execute(args_symbols, session.lldb_manager()).await.expect("list_modules with symbols failed");
+    let result_symbols_str = match result_symbols {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_symbols: Value = serde_json::from_str(&result_symbols_str).expect("Invalid JSON response");
     
     assert!(response_symbols["success"].as_bool().unwrap_or(false), "Symbol count modules should succeed");
     let symbol_modules = response_symbols["modules"].as_array().expect("modules should be array");
@@ -244,21 +297,27 @@ fn test_list_modules_comprehensive() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_target_information_filtering_and_limits() {
+#[tokio::test]
+async fn test_target_information_filtering_and_limits() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
     
     // Launch process for filtering tests
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    session.start().expect("Failed to start debugging session");
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint at main");
     
     // Test list_modules with name pattern filter
-    let tool = ListModulesTool::new(session.manager());
+    let tool = ListModulesTool;
     let mut args_pattern = HashMap::new();
     args_pattern.insert("name_pattern".to_string(), Value::String("lib".to_string()));
     
-    let result_pattern = tool.call(args_pattern).expect("list_modules with pattern failed");
-    let response_pattern: Value = serde_json::from_str(&result_pattern).expect("Invalid JSON response");
+    let result_pattern = tool.execute(args_pattern, session.lldb_manager()).await.expect("list_modules with pattern failed");
+    let result_pattern_str = match result_pattern {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_pattern: Value = serde_json::from_str(&result_pattern_str).expect("Invalid JSON response");
     
     assert!(response_pattern["success"].as_bool().unwrap_or(false), "Pattern filter should succeed");
     let filtered_modules = response_pattern["modules"].as_array().expect("modules should be array");
@@ -274,8 +333,13 @@ fn test_target_information_filtering_and_limits() {
     let mut args_limit = HashMap::new();
     args_limit.insert("limit".to_string(), Value::Number(3.into()));
     
-    let result_limit = tool.call(args_limit).expect("list_modules with limit failed");
-    let response_limit: Value = serde_json::from_str(&result_limit).expect("Invalid JSON response");
+    let result_limit = tool.execute(args_limit, session.lldb_manager()).await.expect("list_modules with limit failed");
+    let result_limit_str = match result_limit {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => panic!("Tool execution failed: {}", err),
+    };
+    let response_limit: Value = serde_json::from_str(&result_limit_str).expect("Invalid JSON response");
     
     assert!(response_limit["success"].as_bool().unwrap_or(false), "Limit should succeed");
     let limited_modules = response_limit["modules"].as_array().expect("modules should be array");
@@ -284,37 +348,53 @@ fn test_target_information_filtering_and_limits() {
     session.cleanup().expect("Failed to cleanup session");
 }
 
-#[test]
-fn test_target_information_error_handling() {
+#[tokio::test]
+async fn test_target_information_error_handling() {
     let test_debuggee = TestDebuggee::new(TestMode::Normal).expect("Failed to create test debuggee");
-    let mut session = LldbTestSession::new().expect("Failed to create LLDB session");
+    let mut session = TestSession::new(TestMode::Normal).expect("Failed to create LLDB session");
     
     // Launch process for error testing
-    session.launch_and_break(&test_debuggee, Some("main")).expect("Failed to launch and break");
+    session.start().expect("Failed to start debugging session");
+    session.set_test_breakpoint("main").expect("Failed to set breakpoint at main");
     
     // Test target info tools with no active target (after cleanup)
     session.cleanup().expect("Failed to cleanup session");
     
     // Tools should handle missing target gracefully
-    let target_tool = GetTargetInfoTool::new(session.manager());
-    let result_target = target_tool.call(HashMap::new()).expect("Tool should handle missing target gracefully");
-    let response_target: Value = serde_json::from_str(&result_target).expect("Invalid JSON response");
+    let target_tool = GetTargetInfoTool;
+    let result_target = target_tool.execute(HashMap::new(), session.lldb_manager()).await.expect("Tool should handle missing target gracefully");
+    let result_target_str = match result_target {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => format!("{{\"success\": false, \"error\": \"{}\"}}", err),
+    };
+    let response_target: Value = serde_json::from_str(&result_target_str).expect("Invalid JSON response");
     
     // Should handle error gracefully
     if !response_target["success"].as_bool().unwrap_or(false) {
         assert!(response_target["error"].is_string(), "Should provide error message for missing target");
     }
     
-    let platform_tool = GetPlatformInfoTool::new(session.manager());
-    let result_platform = platform_tool.call(HashMap::new()).expect("Tool should handle missing target gracefully");
-    let response_platform: Value = serde_json::from_str(&result_platform).expect("Invalid JSON response");
+    let platform_tool = GetPlatformInfoTool;
+    let result_platform = platform_tool.execute(HashMap::new(), session.lldb_manager()).await.expect("Tool should handle missing target gracefully");
+    let result_platform_str = match result_platform {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => format!("{{\"success\": false, \"error\": \"{}\"}}", err),
+    };
+    let response_platform: Value = serde_json::from_str(&result_platform_str).expect("Invalid JSON response");
     
     // Platform info might still work without active target, but should handle gracefully
     assert!(response_platform["success"].is_boolean(), "Should return success status");
     
-    let modules_tool = ListModulesTool::new(session.manager());
-    let result_modules = modules_tool.call(HashMap::new()).expect("Tool should handle missing target gracefully");
-    let response_modules: Value = serde_json::from_str(&result_modules).expect("Invalid JSON response");
+    let modules_tool = ListModulesTool;
+    let result_modules = modules_tool.execute(HashMap::new(), session.lldb_manager()).await.expect("Tool should handle missing target gracefully");
+    let result_modules_str = match result_modules {
+        ToolResponse::Json(json) => json.to_string(),
+        ToolResponse::Success(text) => text,
+        ToolResponse::Error(err) => format!("{{\"success\": false, \"error\": \"{}\"}}", err),
+    };
+    let response_modules: Value = serde_json::from_str(&result_modules_str).expect("Invalid JSON response");
     
     // Should handle error gracefully for missing target
     if !response_modules["success"].as_bool().unwrap_or(false) {

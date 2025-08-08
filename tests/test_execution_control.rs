@@ -264,7 +264,7 @@ async fn test_f0011_step_instruction_functionality() {
             let _ = session.continue_execution();
             
             // Test instruction step
-            let result = session.lldb_manager().step_instruction();
+            let result = session.lldb_manager().step_instruction(false);
             
             match result {
                 Ok(_) => {
@@ -305,7 +305,7 @@ async fn test_f0012_run_until_address() {
             let _ = session.continue_execution();
             
             // Test run until (use a reasonable address or line)
-            let result = session.lldb_manager().run_until("showcase_variables");
+            let result = session.lldb_manager().run_until(None, Some("main.cpp"), Some(42));
             
             match result {
                 Ok(_) => {
@@ -340,7 +340,7 @@ async fn test_f0012_run_until_invalid_location() {
     match session.start() {
         Ok(_pid) => {
             // Test run until with invalid location
-            let result = session.lldb_manager().run_until("invalid_function_name_12345");
+            let result = session.lldb_manager().run_until(None, Some("invalid_file.cpp"), Some(999));
             
             match result {
                 Err(e) => {

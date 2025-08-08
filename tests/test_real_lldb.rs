@@ -16,30 +16,30 @@ async fn test_real_lldb_integration() {
     
     // Test LLDB manager creation
     match LldbManager::new(None) {
-        Ok(manager) => {
+        Ok(mut manager) => {
             println!("✅ LLDB Manager created successfully");
             
             // Test basic process launch
             let test_binary_path = std::fs::canonicalize(test_binary).unwrap();
             println!("Attempting to launch: {}", test_binary_path.display());
             
+            let args = vec!["simple".to_string()]; // Run in simple mode
+            let env = std::collections::HashMap::new();
             match manager.launch_process(
                 test_binary_path.to_str().unwrap(),
-                &["simple"], // Run in simple mode
-                &[],
-                None
+                &args,
+                &env
             ) {
-                Ok(process_info) => {
+                Ok(pid) => {
                     println!("✅ Process launched successfully!");
-                    println!("  PID: {}", process_info.pid);
-                    println!("  State: {}", process_info.state);
+                    println!("  PID: {}", pid);
                     
                     // Test process info retrieval
                     match manager.get_process_info() {
                         Ok(info) => {
                             println!("✅ Process info retrieved:");
                             println!("  PID: {}", info.pid);
-                            println!("  Executable: {}", info.executable_path);
+                            println!("  Executable: {:?}", info.executable_path);
                             println!("  State: {}", info.state);
                         }
                         Err(e) => println!("⚠️  Process info failed: {}", e),
