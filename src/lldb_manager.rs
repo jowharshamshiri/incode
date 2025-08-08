@@ -658,7 +658,7 @@ impl LldbManager {
         let error = unsafe { CreateSBError() };
         let process = unsafe { SBTargetAttach(target, attach_info, error) };
         
-        if unsafe { SBErrorIsValid(error) } {
+        let attach_result = if unsafe { SBErrorIsValid(error) } {
             let error_msg = unsafe { 
                 let stream = CreateSBStream();
                 SBErrorGetDescription(error, stream);
@@ -671,17 +671,18 @@ impl LldbManager {
                 DisposeSBStream(stream);
                 result
             };
-            unsafe { DisposeSBError(error) };
-            unsafe { DisposeSBAttachInfo(attach_info) };
-            return Err(IncodeError::process_not_found(format!("Failed to attach to process {}: {}", pid, error_msg)));
-        }
+            Err(IncodeError::process_not_found(format!("Failed to attach to process {}: {}", pid, error_msg)))
+        } else if process.is_null() {
+            Err(IncodeError::process_not_found(format!("Failed to attach to process {}", pid)))
+        } else {
+            Ok(process)
+        };
         
+        // Single cleanup point to prevent double-disposal
         unsafe { DisposeSBError(error) };
         unsafe { DisposeSBAttachInfo(attach_info) };
-
-        if process.is_null() {
-            return Err(IncodeError::process_not_found(format!("Failed to attach to process {}", pid)));
-        }
+        
+        let process = attach_result?;
 
         // Check if attachment was successful
         let process_state = unsafe { SBProcessGetState(process) };
@@ -711,7 +712,10 @@ impl LldbManager {
 
         let error = unsafe { CreateSBError() };
         unsafe { SBProcessDetach(process) };
-        if unsafe { SBErrorIsValid(error) } {
+        let has_error = unsafe { SBErrorIsValid(error) };
+        unsafe { DisposeSBError(error) };
+        
+        if has_error {
             return Err(IncodeError::lldb_op("Failed to detach from process"));
         }
 
