@@ -44,6 +44,19 @@ libc = "0.2"
 tokio-test = "0.4"
 tempfile = "3.0"
 
+# Build configuration for LLDB linking
+[build-dependencies]
+cc = "1.0"
+
+# Configure linking for LLDB libraries
+[target.'cfg(target_os = "macos")'.dependencies]
+# LLDB framework linking is handled via build.rs
+
+# Feature flags
+[features]
+default = []
+mock = []
+
 [lib]
 name = "incode"
 path = "src/lib.rs"
