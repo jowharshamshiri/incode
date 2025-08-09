@@ -36,12 +36,54 @@ async fn main() -> IncodeResult<()> {
                 .help("Path to LLDB executable")
                 .value_name("PATH")
         )
+        .arg(
+            Arg::new("debug-schemas")
+                .long("debug-schemas")
+                .help("Debug tool schemas")
+                .action(clap::ArgAction::SetTrue)
+        )
         .get_matches();
 
     if matches.get_flag("debug") {
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::new("debug"))
             .init();
+    }
+
+    // Debug schemas if requested
+    if matches.get_flag("debug-schemas") {
+        use crate::tools::ToolRegistry;
+        let registry = ToolRegistry::new();
+        let tools = registry.get_tool_list();
+        
+        println!("Total tools: {}", tools.len());
+        
+        for (i, tool) in tools.iter().enumerate() {
+            if i >= 40 && i <= 50 {  // Focus on tools around 45
+                println!("Tool {}: {} - {}", i, tool["name"], tool["description"]);
+                if i == 45 {
+                    println!("=== PROBLEMATIC TOOL 45 SCHEMA ===");
+                    println!("{}", serde_json::to_string_pretty(&tool["inputSchema"]).unwrap());
+                    
+                    // Try to identify specific issues
+                    let schema = &tool["inputSchema"];
+                    if let Some(properties) = schema.get("properties") {
+                        for (prop_name, prop_def) in properties.as_object().unwrap() {
+                            if let Some(prop_enum) = prop_def.get("enum") {
+                                if let Some(enum_array) = prop_enum.as_array() {
+                                    for enum_val in enum_array {
+                                        if enum_val.as_str() == Some("") {
+                                            println!("  FOUND EMPTY STRING IN ENUM: {}", prop_name);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return Ok(());
     }
 
     info!("Starting InCode MCP Server v{}", env!("CARGO_PKG_VERSION"));

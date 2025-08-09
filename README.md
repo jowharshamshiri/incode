@@ -1,97 +1,97 @@
-# InCode - Comprehensive LLDB Debugging Automation
+# InCode - LLDB Debugging Automation
 
 **Version**: 0.1.0  
-**Type**: MCP Server for AI-Powered LLDB Debugging  
-**Scope**: 65+ debugging tools across 13 categories
+**Type**: MCP Server for LLDB Debugging  
+**Scope**: 65 debugging tools across 13 categories
 
 ## Overview
 
-InCode is a comprehensive Model Context Protocol (MCP) server that provides AI agents with complete LLDB debugging capabilities. Inspired by [insite's](https://github.com/jowharshamshiri/insite) comprehensive browser automation (52 tools across 13 categories), InCode delivers the same breadth of coverage for LLDB debugging automation.
+InCode is a Model Context Protocol (MCP) server that provides AI agents with LLDB debugging capabilities. Following the pattern established by [insite](https://github.com/jowharshamshiri/insite) for browser automation (52 tools across 13 categories), InCode provides similar coverage for LLDB debugging automation.
 
-Just as insite allows agents to see into browsers - taking screenshots, monitoring network activity, executing JavaScript - InCode allows agents to see into native binary execution via LLDB debugging with comprehensive process control, memory inspection, and program analysis.
+Where insite enables agents to interact with browsers through screenshots, network monitoring, and JavaScript execution, InCode enables agents to debug native binaries through LLDB with process control, memory inspection, and program analysis.
 
 ## Architecture
 
 - **Language**: Rust (performance, safety, memory management)
 - **LLDB Integration**: lldb-sys crate for direct C++ API access
 - **Protocol**: Model Context Protocol (MCP) for AI agent communication
-- **Design**: Feature-centric development with 65+ tools organized by category
+- **Design**: Feature-centric development with 65 tools organized by category
 
 ## Features Overview
 
-### 🔧 Process Control & Lifecycle (6 tools)
+### Process Control & Lifecycle (6 tools)
 
 - Launch/attach to processes with full environment control
 - Process discovery and debugging target management
 - Graceful detachment and resource cleanup
 
-### ⚡ Execution Control (7 tools)
+### Execution Control (7 tools)
 
 - Continue, step over, step into, step out operations
 - Instruction-level stepping and conditional execution
 - Process interruption and execution flow control
 
-### 🎯 Breakpoint Management (8 tools)
+### Breakpoint Management (8 tools)
 
-- Comprehensive breakpoint system (address, function, file:line)
+- Breakpoint system (address, function, file:line)
 - Watchpoints for memory access monitoring
 - Conditional breakpoints with automated actions
 
-### 📚 Stack & Frame Analysis (6 tools)
+### Stack & Frame Analysis (6 tools)
 
-- Complete call stack inspection and navigation
+- Call stack inspection and navigation
 - Frame-scoped variable access and expression evaluation
 - Function argument and local variable analysis
 
-### 🧠 Memory Inspection (7 tools)
+### Memory Inspection (7 tools)
 
 - Raw memory read/write with multiple formats
 - Assembly disassembly and pattern searching  
 - Memory mapping and region analysis
 
-### 🔍 Variable & Symbol Inspection (6 tools)
+### Variable & Symbol Inspection (6 tools)
 
 - Local, global, and scoped variable access
 - Runtime expression evaluation in debugging context
 - Symbol table lookup and introspection
 
-### 🧵 Thread Management (5 tools)
+### Thread Management (5 tools)
 
 - Multi-threaded debugging with thread enumeration
 - Thread selection and individual thread control
 - Thread state management (suspend/resume)
 
-### 💾 Register Inspection (4 tools)
+### Register Inspection (4 tools)
 
 - CPU register access and modification
 - Register state management and introspection
 - Cross-architecture register handling
 
-### 📖 Debug Information (4 tools)
+### Debug Information (4 tools)
 
 - Source code integration and display
 - Function discovery and address-to-source mapping
 - Debug symbol analysis and metadata
 
-### 🎯 Target Information (3 tools)
+### Target Information (3 tools)
 
 - Executable analysis (architecture, format, symbols)
 - Platform and environment information
 - Loaded module and library enumeration
 
-### ⚙️ LLDB Control & Configuration (3 tools)
+### LLDB Control & Configuration (3 tools)
 
 - Direct LLDB command execution
 - LLDB settings and configuration management
 - Version information and capability detection
 
-### 💾 Session Management (4 tools)
+### Session Management (4 tools)
 
 - Debugging session persistence and restoration
 - State management across debugging workflows
 - Resource cleanup and session lifecycle
 
-### 🔬 Advanced Analysis (2 tools)
+### Advanced Analysis (2 tools)
 
 - Automated crash analysis and root cause identification
 - Core dump generation for offline analysis
@@ -207,30 +207,22 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 
 ## Development Status
 
-**Current Phase**: Foundation Complete  
-**Implementation**: Core architecture and MCP server framework operational  
-**Next Phase**: Tool implementation (starting with Process Control category)
+**Current Status**: All 65 tools implemented and validated  
+**Implementation**: Complete LLDB debugging platform operational  
+**Test Coverage**: Real LLDB integration with comprehensive test suites
 
-### Feature Implementation Roadmap
+### Implementation Status
 
-- **Phase 1**: Core Debugging (21 tools) - Process Control, Execution Control, Breakpoints  
-- **Phase 2**: Inspection & Analysis (19 tools) - Stack, Memory, Variables
-- **Phase 3**: Advanced Control (9 tools) - Threads, Registers
-- **Phase 4**: Information & Management (10 tools) - Debug Info, Target Info, LLDB Control  
-- **Phase 5**: Enterprise Features (6 tools) - Session Management, Advanced Analysis
+All 65 debugging tools across 13 categories are implemented with real LLDB C++ API integration. The platform includes comprehensive test infrastructure using actual LLDB debugging sessions.
 
 ## Project Goals
 
-- **Comprehensive Coverage**: Match insite's breadth for LLDB debugging automation
-- **AI Agent Integration**: Seamless MCP protocol for natural language debugging
-- **Performance**: Sub-second response times for inspection operations  
-- **Reliability**: Robust error handling and session management
-- **Extensibility**: Modular design for additional debugging capabilities
+- **Coverage**: Match insite's approach for LLDB debugging automation
+- **AI Agent Integration**: MCP protocol for programmatic debugging workflows
+- **Performance**: Reasonable response times for debugging operations  
+- **Reliability**: Error handling and session management
+- **Modularity**: Organized design for debugging capabilities
 
 ## License
 
 MIT License - See LICENSE file for details.
-
----
-
-**InCode: Bringing the power of expert-level LLDB debugging to AI agents**
