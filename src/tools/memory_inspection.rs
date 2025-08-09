@@ -842,8 +842,7 @@ impl Tool for MemoryMapTool {
             "filter_type": {
                 "type": "string",
                 "description": "Filter segments by type (optional)",
-                "enum": ["TEXT", "DATA", "STACK", "HEAP", "PAGEZERO", ""],
-                "default": ""
+                "enum": ["TEXT", "DATA", "STACK", "HEAP", "PAGEZERO"]
             },
             "format": {
                 "type": "string",
