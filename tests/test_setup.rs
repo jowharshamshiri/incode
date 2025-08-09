@@ -350,6 +350,20 @@ impl TestSession {
         }
     }
     
+    /// Interrupt process execution to stop at current location
+    pub fn interrupt_process(&mut self) -> IncodeResult<()> {
+        match self.lldb_manager.interrupt_execution() {
+            Ok(_) => {
+                println!("Process interrupted successfully");
+                Ok(())
+            }
+            Err(e) => {
+                println!("Interrupt process result: {}", e);
+                Ok(()) // May be expected in some test scenarios
+            }
+        }
+    }
+    
     /// Cleanup the session
     pub fn cleanup(&mut self) -> IncodeResult<()> {
         // Detach from process if attached
