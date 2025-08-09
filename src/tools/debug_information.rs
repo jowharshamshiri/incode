@@ -341,8 +341,7 @@ impl Tool for GetSourceCodeTool {
         json!({
             "address": {
                 "type": ["number", "string"],
-                "description": "Specific address to get source for (hex string or number, uses current location if not provided)",
-                "optional": true
+                "description": "Specific address to get source for (hex string or number, uses current location if not provided)"
             },
             "context_lines": {
                 "type": "number", 
@@ -383,13 +382,11 @@ impl Tool for ListFunctionsTool {
         json!({
             "module_filter": {
                 "type": "string",
-                "description": "Filter functions by module name",
-                "optional": true
+                "description": "Filter functions by module name"
             },
             "name_filter": {
                 "type": "string",
-                "description": "Filter functions by name (case-insensitive substring match)",
-                "optional": true
+                "description": "Filter functions by name (case-insensitive substring match)"
             },
             "include_addresses": {
                 "type": "boolean",

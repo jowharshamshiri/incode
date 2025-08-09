@@ -37,10 +37,10 @@ async fn main() -> IncodeResult<()> {
                 .value_name("PATH")
         )
         .arg(
-            Arg::new("debug-schemas")
-                .long("debug-schemas")
-                .help("Debug tool schemas")
-                .action(clap::ArgAction::SetTrue)
+            Arg::new("debug-tool")
+                .long("debug-tool")
+                .help("Debug specific tool number")
+                .value_name("NUM")
         )
         .get_matches();
 
@@ -50,35 +50,40 @@ async fn main() -> IncodeResult<()> {
             .init();
     }
 
-    // Debug schemas if requested
-    if matches.get_flag("debug-schemas") {
+    // Debug specific tool if requested
+    if let Some(tool_num_str) = matches.get_one::<String>("debug-tool") {
         use crate::tools::ToolRegistry;
+        let tool_num: usize = tool_num_str.parse().unwrap_or(25);
         let registry = ToolRegistry::new();
         let tools = registry.get_tool_list();
         
         println!("Total tools: {}", tools.len());
         
-        for (i, tool) in tools.iter().enumerate() {
-            if i >= 40 && i <= 50 {  // Focus on tools around 45
-                println!("Tool {}: {} - {}", i, tool["name"], tool["description"]);
-                if i == 45 {
-                    println!("=== PROBLEMATIC TOOL 45 SCHEMA ===");
-                    println!("{}", serde_json::to_string_pretty(&tool["inputSchema"]).unwrap());
-                    
-                    // Try to identify specific issues
-                    let schema = &tool["inputSchema"];
-                    if let Some(properties) = schema.get("properties") {
-                        for (prop_name, prop_def) in properties.as_object().unwrap() {
-                            if let Some(prop_enum) = prop_def.get("enum") {
-                                if let Some(enum_array) = prop_enum.as_array() {
-                                    for enum_val in enum_array {
-                                        if enum_val.as_str() == Some("") {
-                                            println!("  FOUND EMPTY STRING IN ENUM: {}", prop_name);
-                                        }
-                                    }
+        if tool_num < tools.len() {
+            let tool = &tools[tool_num];
+            println!("=== TOOL {} SCHEMA ===", tool_num);
+            println!("Name: {}", tool["name"]);
+            println!("Description: {}", tool["description"]);
+            println!("{}", serde_json::to_string_pretty(&tool["inputSchema"]).unwrap());
+            
+            // Check for schema issues
+            let schema = &tool["inputSchema"];
+            if let Some(properties) = schema.get("properties") {
+                for (prop_name, prop_def) in properties.as_object().unwrap() {
+                    if let Some(enum_val) = prop_def.get("enum") {
+                        if let Some(enum_array) = enum_val.as_array() {
+                            for val in enum_array {
+                                if val.as_str() == Some("") {
+                                    println!("  ❌ Empty string in enum: {}", prop_name);
                                 }
                             }
                         }
+                    }
+                    if prop_def.get("optional").is_some() {
+                        println!("  ❌ Invalid 'optional' property: {}", prop_name);
+                    }
+                    if prop_def.get("required").is_some() {
+                        println!("  ❌ Invalid 'required' property: {}", prop_name);
                     }
                 }
             }

@@ -276,8 +276,7 @@ impl Tool for ListThreadsTool {
             },
             "filter_state": {
                 "type": "string",
-                "description": "Filter threads by state (stopped, running, etc.)",
-                "optional": true
+                "description": "Filter threads by state (stopped, running, etc.)"
             }
         })
     }

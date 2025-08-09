@@ -274,8 +274,7 @@ impl Tool for GetRegistersTool {
         json!({
             "thread_id": {
                 "type": "number",
-                "description": "Thread ID to get registers for (uses current thread if not specified)",
-                "optional": true
+                "description": "Thread ID to get registers for (uses current thread if not specified)"
             },
             "include_metadata": {
                 "type": "boolean",
@@ -284,8 +283,7 @@ impl Tool for GetRegistersTool {
             },
             "register_filter": {
                 "type": "string",
-                "description": "Filter registers by name (case-insensitive substring match)",
-                "optional": true
+                "description": "Filter registers by name (case-insensitive substring match)"
             }
         })
     }
@@ -322,8 +320,7 @@ impl Tool for SetRegisterTool {
             },
             "thread_id": {
                 "type": "number",
-                "description": "Thread ID (uses current thread if not specified)",
-                "optional": true
+                "description": "Thread ID (uses current thread if not specified)"
             }
         })
     }
@@ -356,8 +353,7 @@ impl Tool for GetRegisterInfoTool {
             },
             "thread_id": {
                 "type": "number",
-                "description": "Thread ID (uses current thread if not specified)",
-                "optional": true
+                "description": "Thread ID (uses current thread if not specified)"
             }
         })
     }
@@ -386,8 +382,7 @@ impl Tool for SaveRegisterStateTool {
         json!({
             "thread_id": {
                 "type": "number",
-                "description": "Thread ID to save registers for (uses current thread if not specified)",
-                "optional": true
+                "description": "Thread ID to save registers for (uses current thread if not specified)"
             },
             "include_metadata": {
                 "type": "boolean",

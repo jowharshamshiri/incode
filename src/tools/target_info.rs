@@ -96,8 +96,7 @@ impl Tool for ListModulesTool {
         json!({
             "filter_name": {
                 "type": "string",
-                "description": "Filter modules by name (substring match)",
-                "required": false
+                "description": "Filter modules by name (substring match)"
             },
             "include_debug_info": {
                 "type": "boolean",
