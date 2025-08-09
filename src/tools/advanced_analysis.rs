@@ -22,24 +22,21 @@ impl Tool for AnalyzeCrashTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "core_file_path": {
-                    "type": "string",
-                    "description": "Path to core dump file to analyze (optional, uses current process if not specified)"
-                },
-                "include_recommendations": {
-                    "type": "boolean",
-                    "description": "Include debugging recommendations in the analysis",
-                    "default": true
-                },
-                "max_backtrace_depth": {
-                    "type": "number",
-                    "description": "Maximum depth for backtrace analysis",
-                    "default": 10,
-                    "minimum": 1,
-                    "maximum": 100
-                }
+            "core_file_path": {
+                "type": "string",
+                "description": "Path to core dump file to analyze (optional, uses current process if not specified)"
+            },
+            "include_recommendations": {
+                "type": "boolean",
+                "description": "Include debugging recommendations in the analysis",
+                "default": true
+            },
+            "max_backtrace_depth": {
+                "type": "number",
+                "description": "Maximum depth for backtrace analysis",
+                "default": 10,
+                "minimum": 1,
+                "maximum": 100
             }
         })
     }
@@ -105,25 +102,21 @@ impl Tool for GenerateCoreDumpTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "output_path": {
-                    "type": "string",
-                    "description": "Path where core dump file should be saved"
-                },
-                "format": {
-                    "type": "string",
-                    "enum": ["auto", "elf", "macho", "minidump"],
-                    "description": "Core dump format (default: auto - detect from platform)",
-                    "default": "auto"
-                },
-                "include_memory": {
-                    "type": "boolean",
-                    "description": "Include full memory contents in core dump",
-                    "default": true
-                }
+            "output_path": {
+                "type": "string",
+                "description": "Path where core dump file should be saved"
             },
-            "required": ["output_path"]
+            "format": {
+                "type": "string",
+                "enum": ["auto", "elf", "macho", "minidump"],
+                "description": "Core dump format (default: auto - detect from platform)",
+                "default": "auto"
+            },
+            "include_memory": {
+                "type": "boolean",
+                "description": "Include full memory contents in core dump",
+                "default": true
+            }
         })
     }
     

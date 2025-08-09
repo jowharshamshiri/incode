@@ -269,18 +269,15 @@ impl Tool for ListThreadsTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "include_details": {
-                    "type": "boolean",
-                    "description": "Include detailed thread information including frames",
-                    "default": false
-                },
-                "filter_state": {
-                    "type": "string",
-                    "description": "Filter threads by state (stopped, running, etc.)",
-                    "optional": true
-                }
+            "include_details": {
+                "type": "boolean",
+                "description": "Include detailed thread information including frames",
+                "default": false
+            },
+            "filter_state": {
+                "type": "string",
+                "description": "Filter threads by state (stopped, running, etc.)",
+                "optional": true
             }
         })
     }
@@ -307,19 +304,15 @@ impl Tool for SelectThreadTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "thread_id": {
-                    "type": "number",
-                    "description": "Thread ID to select"
-                },
-                "include_frames": {
-                    "type": "boolean",
-                    "description": "Include current frame information",
-                    "default": false
-                }
+            "thread_id": {
+                "type": "number",
+                "description": "Thread ID to select"
             },
-            "required": ["thread_id"]
+            "include_frames": {
+                "type": "boolean",
+                "description": "Include current frame information",
+                "default": false
+            }
         })
     }
     
@@ -345,24 +338,20 @@ impl Tool for GetThreadInfoTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "thread_id": {
-                    "type": "number",
-                    "description": "Thread ID to get info for"
-                },
-                "include_stack": {
-                    "type": "boolean",
-                    "description": "Include stack frame information",
-                    "default": false
-                },
-                "include_registers": {
-                    "type": "boolean",
-                    "description": "Include register information",
-                    "default": false
-                }
+            "thread_id": {
+                "type": "number",
+                "description": "Thread ID to get info for"
             },
-            "required": ["thread_id"]
+            "include_stack": {
+                "type": "boolean",
+                "description": "Include stack frame information",
+                "default": false
+            },
+            "include_registers": {
+                "type": "boolean",
+                "description": "Include register information",
+                "default": false
+            }
         })
     }
     
@@ -388,14 +377,10 @@ impl Tool for SuspendThreadTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "thread_id": {
-                    "type": "number",
-                    "description": "Thread ID to suspend"
-                }
-            },
-            "required": ["thread_id"]
+            "thread_id": {
+                "type": "number",
+                "description": "Thread ID to suspend"
+            }
         })
     }
     
@@ -421,14 +406,10 @@ impl Tool for ResumeThreadTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "thread_id": {
-                    "type": "number",
-                    "description": "Thread ID to resume"
-                }
-            },
-            "required": ["thread_id"]
+            "thread_id": {
+                "type": "number",
+                "description": "Thread ID to resume"
+            }
         })
     }
     

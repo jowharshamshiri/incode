@@ -87,7 +87,7 @@ impl ToolRegistry {
                 "inputSchema": {
                     "type": "object",
                     "properties": tool.parameters(),
-                    "required": []
+                    "additionalProperties": false
                 }
             })
         }).collect()

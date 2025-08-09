@@ -54,11 +54,19 @@ async fn test_tool_registry_initialization() {
     let tool_list = registry.get_tool_list();
     assert!(!tool_list.is_empty(), "Tool list should not be empty");
     
-    // Verify tool list structure
-    for tool in &tool_list {
+    // Verify tool list structure and debug the 16th tool
+    for (index, tool) in tool_list.iter().enumerate() {
         assert!(tool.get("name").is_some(), "Each tool should have a name");
         assert!(tool.get("description").is_some(), "Each tool should have a description");  
         assert!(tool.get("inputSchema").is_some(), "Each tool should have input schema");
+        
+        if index >= 14 && index <= 17 { // Tools 15-18 for debugging
+            let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("unknown");
+            println!("=== TOOL {} DEBUG ===", index + 1);
+            println!("Tool {}: {}", index + 1, name);
+            println!("Schema: {}", serde_json::to_string_pretty(&tool).unwrap());
+            println!("====================");
+        }
     }
     
     println!("✅ Tool list structure valid with {} tools", tool_list.len());

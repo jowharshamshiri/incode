@@ -25,12 +25,9 @@ impl Tool for CreateSessionTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Optional session name for identification"
-                }
+            "name": {
+                "type": "string",
+                "description": "Optional session name for identification"
             }
         })
     }
@@ -70,18 +67,15 @@ impl Tool for SaveSessionTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "UUID of the session to save (optional, uses current session if not specified)"
-                },
-                "format": {
-                    "type": "string",
-                    "enum": ["json", "compact"],
-                    "description": "Output format (default: json)",
-                    "default": "json"
-                }
+            "session_id": {
+                "type": "string",
+                "description": "UUID of the session to save (optional, uses current session if not specified)"
+            },
+            "format": {
+                "type": "string",
+                "enum": ["json", "compact"],
+                "description": "Output format (default: json)",
+                "default": "json"
             }
         })
     }
@@ -142,14 +136,10 @@ impl Tool for LoadSessionTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "session_data": {
-                    "type": "string",
-                    "description": "JSON session data to load"
-                }
-            },
-            "required": ["session_data"]
+            "session_data": {
+                "type": "string",
+                "description": "JSON session data to load"
+            }
         })
     }
     
@@ -187,17 +177,14 @@ impl Tool for CleanupSessionTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "UUID of the session to cleanup (optional, uses current session if not specified)"
-                },
-                "force": {
-                    "type": "boolean",
-                    "description": "Force cleanup even if session is active",
-                    "default": false
-                }
+            "session_id": {
+                "type": "string",
+                "description": "UUID of the session to cleanup (optional, uses current session if not specified)"
+            },
+            "force": {
+                "type": "boolean",
+                "description": "Force cleanup even if session is active",
+                "default": false
             }
         })
     }

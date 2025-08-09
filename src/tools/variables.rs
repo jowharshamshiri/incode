@@ -540,18 +540,14 @@ impl Tool for SetVariableTool {
 
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "variable_name": {
-                    "type": "string",
-                    "description": "Name of the variable to modify (can be simple or qualified name)"
-                },
-                "value": {
-                    "type": "string",
-                    "description": "New value to set (string literals should include quotes, e.g., \"hello\")"
-                }
+            "variable_name": {
+                "type": "string",
+                "description": "Name of the variable to modify (can be simple or qualified name)"
             },
-            "required": ["variable_name", "value"]
+            "value": {
+                "type": "string",
+                "description": "New value to set (string literals should include quotes, e.g., \"hello\")"
+            }
         })
     }
 
@@ -592,14 +588,10 @@ impl Tool for LookupSymbolTool {
 
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "symbol_name": {
-                    "type": "string",
-                    "description": "Name of the symbol to lookup (function, variable, or type)"
-                }
-            },
-            "required": ["symbol_name"]
+            "symbol_name": {
+                "type": "string",
+                "description": "Name of the symbol to lookup (function, variable, or type)"
+            }
         })
     }
 

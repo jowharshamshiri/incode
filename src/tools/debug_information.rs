@@ -339,25 +339,22 @@ impl Tool for GetSourceCodeTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "address": {
-                    "type": ["number", "string"],
-                    "description": "Specific address to get source for (hex string or number, uses current location if not provided)",
-                    "optional": true
-                },
-                "context_lines": {
-                    "type": "number", 
-                    "description": "Number of context lines before/after current line",
-                    "default": 5,
-                    "minimum": 1,
-                    "maximum": 50
-                },
-                "include_addresses": {
-                    "type": "boolean",
-                    "description": "Include memory addresses for each line",
-                    "default": false
-                }
+            "address": {
+                "type": ["number", "string"],
+                "description": "Specific address to get source for (hex string or number, uses current location if not provided)",
+                "optional": true
+            },
+            "context_lines": {
+                "type": "number", 
+                "description": "Number of context lines before/after current line",
+                "default": 5,
+                "minimum": 1,
+                "maximum": 50
+            },
+            "include_addresses": {
+                "type": "boolean",
+                "description": "Include memory addresses for each line",
+                "default": false
             }
         })
     }
@@ -384,28 +381,25 @@ impl Tool for ListFunctionsTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "module_filter": {
-                    "type": "string",
-                    "description": "Filter functions by module name",
-                    "optional": true
-                },
-                "name_filter": {
-                    "type": "string",
-                    "description": "Filter functions by name (case-insensitive substring match)",
-                    "optional": true
-                },
-                "include_addresses": {
-                    "type": "boolean",
-                    "description": "Include function start/end addresses and size",
-                    "default": true
-                },
-                "include_source_info": {
-                    "type": "boolean",
-                    "description": "Include source file path and line number",
-                    "default": false
-                }
+            "module_filter": {
+                "type": "string",
+                "description": "Filter functions by module name",
+                "optional": true
+            },
+            "name_filter": {
+                "type": "string",
+                "description": "Filter functions by name (case-insensitive substring match)",
+                "optional": true
+            },
+            "include_addresses": {
+                "type": "boolean",
+                "description": "Include function start/end addresses and size",
+                "default": true
+            },
+            "include_source_info": {
+                "type": "boolean",
+                "description": "Include source file path and line number",
+                "default": false
             }
         })
     }
@@ -432,14 +426,10 @@ impl Tool for GetLineInfoTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "address": {
-                    "type": ["number", "string"],
-                    "description": "Memory address to lookup (hex string or number)"
-                }
-            },
-            "required": ["address"]
+            "address": {
+                "type": ["number", "string"],
+                "description": "Memory address to lookup (hex string or number)"
+            }
         })
     }
     
@@ -465,18 +455,15 @@ impl Tool for GetDebugInfoTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "include_compilation_units": {
-                    "type": "boolean",
-                    "description": "Include detailed compilation unit information",
-                    "default": false
-                },
-                "include_detailed_stats": {
-                    "type": "boolean",
-                    "description": "Include detailed debug statistics and analysis",
-                    "default": false
-                }
+            "include_compilation_units": {
+                "type": "boolean",
+                "description": "Include detailed compilation unit information",
+                "default": false
+            },
+            "include_detailed_stats": {
+                "type": "boolean",
+                "description": "Include detailed debug statistics and analysis",
+                "default": false
             }
         })
     }

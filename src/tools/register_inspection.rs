@@ -272,23 +272,20 @@ impl Tool for GetRegistersTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "thread_id": {
-                    "type": "number",
-                    "description": "Thread ID to get registers for (uses current thread if not specified)",
-                    "optional": true
-                },
-                "include_metadata": {
-                    "type": "boolean",
-                    "description": "Include register metadata (size, type, format)",
-                    "default": false
-                },
-                "register_filter": {
-                    "type": "string",
-                    "description": "Filter registers by name (case-insensitive substring match)",
-                    "optional": true
-                }
+            "thread_id": {
+                "type": "number",
+                "description": "Thread ID to get registers for (uses current thread if not specified)",
+                "optional": true
+            },
+            "include_metadata": {
+                "type": "boolean",
+                "description": "Include register metadata (size, type, format)",
+                "default": false
+            },
+            "register_filter": {
+                "type": "string",
+                "description": "Filter registers by name (case-insensitive substring match)",
+                "optional": true
             }
         })
     }
@@ -315,23 +312,19 @@ impl Tool for SetRegisterTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "register_name": {
-                    "type": "string",
-                    "description": "Name of the register to modify (e.g., 'rax', 'eip', 'esp')"
-                },
-                "value": {
-                    "type": ["number", "string"],
-                    "description": "New register value (can be decimal number or hex string like '0x1234')"
-                },
-                "thread_id": {
-                    "type": "number",
-                    "description": "Thread ID (uses current thread if not specified)",
-                    "optional": true
-                }
+            "register_name": {
+                "type": "string",
+                "description": "Name of the register to modify (e.g., 'rax', 'eip', 'esp')"
             },
-            "required": ["register_name", "value"]
+            "value": {
+                "type": ["number", "string"],
+                "description": "New register value (can be decimal number or hex string like '0x1234')"
+            },
+            "thread_id": {
+                "type": "number",
+                "description": "Thread ID (uses current thread if not specified)",
+                "optional": true
+            }
         })
     }
     
@@ -357,19 +350,15 @@ impl Tool for GetRegisterInfoTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "register_name": {
-                    "type": "string",
-                    "description": "Name of the register to inspect (e.g., 'rax', 'eip', 'esp')"
-                },
-                "thread_id": {
-                    "type": "number",
-                    "description": "Thread ID (uses current thread if not specified)",
-                    "optional": true
-                }
+            "register_name": {
+                "type": "string",
+                "description": "Name of the register to inspect (e.g., 'rax', 'eip', 'esp')"
             },
-            "required": ["register_name"]
+            "thread_id": {
+                "type": "number",
+                "description": "Thread ID (uses current thread if not specified)",
+                "optional": true
+            }
         })
     }
     
@@ -395,18 +384,15 @@ impl Tool for SaveRegisterStateTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "thread_id": {
-                    "type": "number",
-                    "description": "Thread ID to save registers for (uses current thread if not specified)",
-                    "optional": true
-                },
-                "include_metadata": {
-                    "type": "boolean",
-                    "description": "Include register metadata in saved state",
-                    "default": true
-                }
+            "thread_id": {
+                "type": "number",
+                "description": "Thread ID to save registers for (uses current thread if not specified)",
+                "optional": true
+            },
+            "include_metadata": {
+                "type": "boolean",
+                "description": "Include register metadata in saved state",
+                "default": true
             }
         })
     }

@@ -20,20 +20,16 @@ impl Tool for ExecuteCommandTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "LLDB command to execute (e.g., 'frame info', 'bt', 'p variable_name')"
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Command timeout in seconds (optional, default: 30)",
-                    "minimum": 1,
-                    "maximum": 300
-                }
+            "command": {
+                "type": "string",
+                "description": "LLDB command to execute (e.g., 'frame info', 'bt', 'p variable_name')"
             },
-            "required": ["command"]
+            "timeout": {
+                "type": "number",
+                "description": "Command timeout in seconds (optional, default: 30)",
+                "minimum": 1,
+                "maximum": 300
+            }
         })
     }
     
@@ -102,16 +98,13 @@ impl Tool for GetLldbVersionTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "include_build_info": {
-                    "type": "boolean",
-                    "description": "Include detailed build information (optional, default: false)"
-                },
-                "include_capabilities": {
-                    "type": "boolean",
-                    "description": "Include LLDB capabilities and supported formats (optional, default: false)"
-                }
+            "include_build_info": {
+                "type": "boolean",
+                "description": "Include detailed build information (optional, default: false)"
+            },
+            "include_capabilities": {
+                "type": "boolean",
+                "description": "Include LLDB capabilities and supported formats (optional, default: false)"
             }
         })
     }
@@ -172,24 +165,21 @@ impl Tool for SetLldbSettingsTool {
     
     fn parameters(&self) -> Value {
         json!({
-            "type": "object",
-            "properties": {
-                "setting_name": {
-                    "type": "string",
-                    "description": "Name of the LLDB setting to configure (e.g., 'target.max-children-count', 'thread-format')"
-                },
-                "value": {
-                    "type": ["string", "boolean", "number"],
-                    "description": "Value to set for the setting"
-                },
-                "settings": {
-                    "type": "object",
-                    "description": "Multiple settings to set at once (alternative to setting_name/value)"
-                },
-                "get_current_value": {
-                    "type": "boolean",
-                    "description": "Return current value of the setting"
-                }
+            "setting_name": {
+                "type": "string",
+                "description": "Name of the LLDB setting to configure (e.g., 'target.max-children-count', 'thread-format')"
+            },
+            "value": {
+                "type": ["string", "boolean", "number"],
+                "description": "Value to set for the setting"
+            },
+            "settings": {
+                "type": "object",
+                "description": "Multiple settings to set at once (alternative to setting_name/value)"
+            },
+            "get_current_value": {
+                "type": "boolean",
+                "description": "Return current value of the setting"
             }
         })
     }
