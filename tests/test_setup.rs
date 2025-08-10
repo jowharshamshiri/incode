@@ -6,11 +6,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio, Child};
 use std::time::Duration;
 use std::thread;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::HashMap;
 
-use incode::lldb_manager::{LldbManager, SessionState};
+use incode::lldb_manager::LldbManager;
 use incode::error::{IncodeResult, IncodeError};
 
 /// Test binary execution modes

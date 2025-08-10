@@ -10,15 +10,9 @@
 //
 // Tests variable inspection with real LLDB integration using test_debuggee binary
 
-use std::time::Duration;
-use std::thread;
-
 // Import test setup utilities
 mod test_setup;
-use test_setup::{TestSession, TestMode, TestUtils};
-
-use incode::lldb_manager::LldbManager;
-use incode::error::{IncodeError, IncodeResult};
+use test_setup::{TestSession, TestMode};
 
 #[tokio::test]
 async fn test_f0035_get_variables_success() {
@@ -424,7 +418,7 @@ async fn test_f0039_set_variable() {
             let _ = session.lldb_manager().continue_execution();
             
             // Get original variable value
-            let original_value = match session.lldb_manager().evaluate_expression("modification_test") {
+            let _original_value = match session.lldb_manager().evaluate_expression("modification_test") {
                 Ok(result) => {
                     println!("Original value of modification_test: {}", result);
                     result

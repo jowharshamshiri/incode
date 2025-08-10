@@ -1,4 +1,4 @@
-use crate::lldb_manager::{LldbManager, RegisterInfo, RegisterState};
+use crate::lldb_manager::{LldbManager, RegisterInfo};
 use crate::error::IncodeResult;
 use crate::tools::{Tool, ToolResponse};
 use std::collections::HashMap;

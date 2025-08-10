@@ -246,7 +246,7 @@ impl Tool for SetLldbSettingsTool {
                 match lldb_manager.set_lldb_settings(setting_name, &value_str) {
                     Ok(result) => {
                         // Try to parse the JSON result from the mock implementation
-                        if let Ok(json_result) = serde_json::from_str::<Value>(&result) {
+                        if let Ok(_json_result) = serde_json::from_str::<Value>(&result) {
                             Ok(ToolResponse::Success(result))
                         } else {
                             Ok(ToolResponse::Success(json!({

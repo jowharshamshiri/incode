@@ -375,7 +375,7 @@ impl Tool for CleanupSessionTool {
                 // Only require force for sessions that are actively executing (very restrictive)
                 if matches!(session.state, crate::lldb_manager::SessionState::Running) {
                     // Check if process is actually running or just paused at breakpoint
-                    if let Some(_) = session.process_id {
+                    if session.process_id.is_some() {
                         // For now, allow cleanup even for running sessions in tests
                         // In production, this might need stricter checking
                     }

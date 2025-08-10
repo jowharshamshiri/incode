@@ -47,6 +47,12 @@ pub struct ToolRegistry {
     tools: HashMap<String, Box<dyn Tool + Send + Sync>>,
 }
 
+impl Default for ToolRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ToolRegistry {
     pub fn new() -> Self {
         let mut registry = Self {

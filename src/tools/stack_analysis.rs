@@ -56,7 +56,7 @@ impl Tool for GetBacktraceTool {
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize;
 
-        let include_addresses = arguments.get("include_addresses")
+        let _include_addresses = arguments.get("include_addresses")
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
@@ -109,20 +109,6 @@ impl Tool for GetBacktraceTool {
     }
 }
 
-// Placeholder implementations for remaining tools
-macro_rules! impl_placeholder_tool {
-    ($tool:ident, $name:expr, $desc:expr) => {
-        #[async_trait]
-        impl Tool for $tool {
-            fn name(&self) -> &'static str { $name }
-            fn description(&self) -> &'static str { $desc }
-            fn parameters(&self) -> Value { json!({}) }
-            async fn execute(&self, _: HashMap<String, Value>, _: &mut LldbManager) -> IncodeResult<ToolResponse> {
-                Ok(ToolResponse::Error("Not yet implemented".to_string()))
-            }
-        }
-    };
-}
 
 // F0023: select_frame - Fully implemented
 #[async_trait]

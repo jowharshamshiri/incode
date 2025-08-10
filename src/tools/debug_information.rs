@@ -1,4 +1,4 @@
-use crate::lldb_manager::{LldbManager, SourceCode, FunctionInfo, SourceLocation, DebugInfo};
+use crate::lldb_manager::{LldbManager, FunctionInfo};
 use crate::error::IncodeResult;
 use crate::tools::{Tool, ToolResponse};
 use std::collections::HashMap;
@@ -303,7 +303,7 @@ pub fn get_debug_info(
                     
                 result["detailed_stats"] = json!({
                     "total_address_space": total_address_space,
-                    "average_symbols_per_unit": if debug_info.compilation_units.len() > 0 {
+                    "average_symbols_per_unit": if !debug_info.compilation_units.is_empty() {
                         debug_info.symbol_count / debug_info.compilation_units.len() as u32
                     } else {
                         0

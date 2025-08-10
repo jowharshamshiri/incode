@@ -1,5 +1,4 @@
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, info, warn, error};
 
@@ -133,7 +132,7 @@ impl McpServer {
         
         let arguments = params["arguments"].as_object()
             .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-            .unwrap_or_else(HashMap::new);
+            .unwrap_or_default();
 
         debug!("Calling tool: {} with arguments: {:?}", tool_name, arguments);
 

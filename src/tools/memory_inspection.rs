@@ -155,20 +155,6 @@ impl ReadMemoryTool {
     }
 }
 
-// Placeholder implementations for remaining tools
-macro_rules! impl_placeholder_tool {
-    ($tool:ident, $name:expr, $desc:expr) => {
-        #[async_trait]
-        impl Tool for $tool {
-            fn name(&self) -> &'static str { $name }
-            fn description(&self) -> &'static str { $desc }
-            fn parameters(&self) -> Value { json!({}) }
-            async fn execute(&self, _: HashMap<String, Value>, _: &mut LldbManager) -> IncodeResult<ToolResponse> {
-                Ok(ToolResponse::Error("Not yet implemented".to_string()))
-            }
-        }
-    };
-}
 
 // F0029: write_memory - Fully implemented
 #[async_trait]
