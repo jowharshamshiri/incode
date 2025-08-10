@@ -1,54 +1,48 @@
-[package]
+[[bin]]
 name = "incode"
-version = "0.24.25669"
-edition = "2021"
-description = "InCode - MCP server for LLDB debugging automation"
-authors = ["Bahram Shamshiri <jowharshamshiri@gmail.com>"]
-license = "MIT"
-repository = "https://github.com/jowharshamshiri/incode"
-homepage = "https://github.com/jowharshamshiri/incode"
-documentation = "https://docs.rs/incode"
-readme = "README.md"
-keywords = ["lldb", "debugging", "mcp", "automation", "ai"]
-categories = ["development-tools"]
+path = "src/main.rs"
 
-[dependencies]
-# LLDB integration
-lldb-sys = "0.0.31"
-# MCP Protocol
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tokio = { version = "1.0", features = ["full"] }
-tokio-util = { version = "0.7", features = ["codec"] }
-# Error handling
-anyhow = "1.0"
-thiserror = "1.0"
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-# CLI
-clap = { version = "4.0", features = ["derive"] }
-# Async utilities
-futures = "0.3"
-async-trait = "0.1"
-# UUID for session management
-uuid = { version = "1.0", features = ["v4", "serde"] }
-# Cross-platform process management
-libc = "0.2"
-
-[dev-dependencies]
-tokio-test = "0.4"
-tempfile = "3.0"
-
-# Build configuration for LLDB linking
 [build-dependencies]
 cc = "1.0"
 
-# Configure linking for LLDB libraries
-[target.'cfg(target_os = "macos")'.dependencies]
-# LLDB framework linking is handled via build.rs
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+futures = "0.3"
+libc = "0.2"
+lldb-sys = "0.0.31"
+serde_json = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
 
-# Feature flags
+[dependencies.clap]
+features = ["derive"]
+version = "4.0"
+
+[dependencies.serde]
+features = ["derive"]
+version = "1.0"
+
+[dependencies.tokio]
+features = ["full"]
+version = "1.0"
+
+[dependencies.tokio-util]
+features = ["codec"]
+version = "0.7"
+
+[dependencies.tracing-subscriber]
+features = ["env-filter"]
+version = "0.3"
+
+[dependencies.uuid]
+features = ["v4", "serde"]
+version = "1.0"
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio-test = "0.4"
+
 [features]
 default = []
 mock = []
@@ -57,17 +51,29 @@ mock = []
 name = "incode"
 path = "src/lib.rs"
 
-[[bin]]
+[package]
+authors = ["Bahram Shamshiri <jowharshamshiri@gmail.com>"]
+categories = ["development-tools"]
+description = "InCode - MCP server for LLDB debugging automation"
+documentation = "https://docs.rs/incode"
+edition = "2021"
+homepage = "https://github.com/jowharshamshiri/incode"
+keywords = ["lldb", "debugging", "mcp", "automation", "ai"]
+license = "MIT"
 name = "incode"
-path = "src/main.rs"
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
+readme = "README.md"
+repository = "https://github.com/jowharshamshiri/incode"
+version = "0.26.25674"
 
 [profile.dev]
-opt-level = 0
 debug = true
+opt-level = 0
 split-debuginfo = "unpacked"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+
+[target.'cfg(target_os = "macos")'.dependencies]

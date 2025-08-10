@@ -34,9 +34,6 @@ impl McpServer {
         let mut reader = BufReader::new(stdin);
         let mut line = String::new();
 
-        // Send initialization response
-        self.send_initialize_response(&mut stdout).await?;
-
         loop {
             line.clear();
             match reader.read_line(&mut line).await {
@@ -47,7 +44,11 @@ impl McpServer {
                 Ok(_) => {
                     if let Err(e) = self.process_request(&line, &mut stdout).await {
                         error!("Error processing request: {}", e);
-                        self.send_error_response(&mut stdout, &e).await?;
+                        // Try to parse request to get ID for error response
+                        let request_id = serde_json::from_str::<Value>(line.trim())
+                            .ok()
+                            .and_then(|req| req.get("id").cloned());
+                        self.send_error_response(&mut stdout, &e, request_id).await?;
                     }
                 }
                 Err(e) => {
@@ -92,6 +93,12 @@ impl McpServer {
         let response = match method {
             "tools/list" => self.handle_tools_list()?,
             "tools/call" => self.handle_tool_call(&request).await?,
+            "resources/list" => json!({"resources": []}),
+            "prompts/list" => json!({"prompts": []}),
+            "notifications/initialized" => {
+                // Notification - no response needed
+                return Ok(());
+            },
             "initialize" => json!({
                 "protocolVersion": "2024-11-05",
                 "capabilities": {
@@ -165,14 +172,18 @@ impl McpServer {
         Ok(())
     }
 
-    async fn send_error_response(&self, stdout: &mut tokio::io::Stdout, error: &IncodeError) -> IncodeResult<()> {
-        let response = json!({
+    async fn send_error_response(&self, stdout: &mut tokio::io::Stdout, error: &IncodeError, request_id: Option<Value>) -> IncodeResult<()> {
+        let mut response = json!({
             "jsonrpc": "2.0",
             "error": {
                 "code": -1,
                 "message": error.to_string()
             }
         });
+
+        if let Some(id) = request_id {
+            response["id"] = id;
+        }
 
         self.send_response(stdout, response).await
     }

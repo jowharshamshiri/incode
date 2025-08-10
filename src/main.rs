@@ -12,11 +12,17 @@ use crate::error::IncodeResult;
 
 #[tokio::main]
 async fn main() -> IncodeResult<()> {
-    // Initialize logging
+    // Initialize logging to stderr for MCP compatibility (stdout is for JSON responses)
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_ansi(false)
+        .with_target(false)
+        .with_thread_ids(false)
+        .with_file(false)
+        .with_line_number(false)
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("incode=info"))
+                .unwrap_or_else(|_| EnvFilter::new("off"))
         )
         .init();
 
@@ -39,7 +45,11 @@ async fn main() -> IncodeResult<()> {
         .get_matches();
 
     if matches.get_flag("debug") {
+        // Re-initialize with debug level but still to stderr
         tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_ansi(false)
+            .with_target(false)
             .with_env_filter(EnvFilter::new("debug"))
             .init();
     }
