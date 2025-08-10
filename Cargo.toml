@@ -2,15 +2,15 @@
 name = "incode"
 version = "0.1.0"
 edition = "2021"
-description = "InCode - Comprehensive MCP server for LLDB debugging automation"
-authors = ["InCode Project"]
+description = "InCode - MCP server for LLDB debugging automation"
+authors = ["Bahram Shamshiri <jowharshamshiri@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/jowharshamshiri/incode"
 homepage = "https://github.com/jowharshamshiri/incode"
 documentation = "https://docs.rs/incode"
 readme = "README.md"
 keywords = ["lldb", "debugging", "mcp", "automation", "ai"]
-categories = ["development-tools", "debugging"]
+categories = ["development-tools", "debugging", "mcp", "lldb"]
 
 [dependencies]
 # LLDB integration
