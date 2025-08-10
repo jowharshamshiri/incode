@@ -1,6 +1,6 @@
 [package]
 name = "incode"
-version = "0.1.0"
+version = "0.24.25669"
 edition = "2021"
 description = "InCode - MCP server for LLDB debugging automation"
 authors = ["Bahram Shamshiri <jowharshamshiri@gmail.com>"]
