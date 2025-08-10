@@ -8,6 +8,7 @@ use std::time::Duration;
 use std::thread;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashMap;
 
 use incode::lldb_manager::{LldbManager, SessionState};
 use incode::error::{IncodeResult, IncodeError};
@@ -21,6 +22,8 @@ pub enum TestMode {
     StepDebug,
     CrashSegv,
     CrashStack,
+    CrashAbort,
+    CrashDiv0,
     Infinite,
 }
 
@@ -33,6 +36,8 @@ impl TestMode {
             TestMode::StepDebug => "step-debug",
             TestMode::CrashSegv => "crash-segv",
             TestMode::CrashStack => "crash-stack",
+            TestMode::CrashAbort => "crash-abort",
+            TestMode::CrashDiv0 => "crash-div0",
             TestMode::Infinite => "infinite",
         }
     }
@@ -62,6 +67,11 @@ impl TestDebuggee {
     /// Get the binary path
     pub fn binary_path(&self) -> &PathBuf {
         &self.binary_path
+    }
+    
+    /// Get test mode
+    pub fn mode(&self) -> &TestMode {
+        &self.mode
     }
 
     /// Find the test_debuggee binary
@@ -297,8 +307,18 @@ impl TestSession {
         let session_id = self.lldb_manager.create_session()?;
         self.session_id = Some(session_id);
         
-        // Launch the test binary (it will crash)
-        let _pid = self.debuggee.launch()?;
+        // Launch the test binary via LLDB (it will crash)
+        let binary_path = self.debuggee.binary_path();
+        let args = vec![
+            "--mode".to_string(),
+            self.debuggee.mode().as_arg().to_string(),
+        ];
+        let env = HashMap::new();
+        let _pid = self.lldb_manager.launch_process(
+            binary_path.to_str().unwrap(),
+            &args,
+            &env
+        )?;
         
         // Wait for crash to occur
         thread::sleep(Duration::from_millis(500));

@@ -59,15 +59,13 @@ pub fn get_source_code(
             
             Ok(json!({
                 "success": true,
-                "source_code": {
-                    "file_path": source_code.file_path,
-                    "lines": lines_json,
-                    "start_line": source_code.start_line,
-                    "end_line": source_code.end_line,
-                    "current_line": source_code.current_line,
-                    "total_lines": source_code.total_lines,
-                    "context_lines": context_lines
-                },
+                "file_path": source_code.file_path,
+                "source_lines": lines_json,
+                "start_line": source_code.start_line,
+                "end_line": source_code.end_line,
+                "current_line": source_code.current_line.unwrap_or(0),
+                "total_lines": source_code.total_lines,
+                "context_lines": context_lines,
                 "metadata": {
                     "address_requested": address.map(|a| format!("0x{:x}", a)),
                     "lines_returned": source_code.lines.len(),
@@ -105,19 +103,28 @@ pub fn list_functions(
     let include_source_info = arguments.get("include_source_info")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+        
+    let limit = arguments.get("limit")
+        .and_then(|v| v.as_u64())
+        .map(|l| l as usize);
     
     match lldb_manager.list_functions(module_filter) {
         Ok(functions) => {
             debug!("Found {} functions", functions.len());
             
             // Apply name filter if specified
-            let filtered_functions: Vec<&FunctionInfo> = if let Some(filter) = name_filter {
+            let mut filtered_functions: Vec<&FunctionInfo> = if let Some(filter) = name_filter {
                 functions.iter()
                     .filter(|f| f.name.to_lowercase().contains(&filter.to_lowercase()))
                     .collect()
             } else {
                 functions.iter().collect()
             };
+            
+            // Apply limit if specified
+            if let Some(limit_count) = limit {
+                filtered_functions.truncate(limit_count);
+            }
             
             let functions_json: Vec<Value> = filtered_functions.iter().map(|func| {
                 let mut func_obj = json!({
@@ -126,6 +133,9 @@ pub fn list_functions(
                     "is_inline": func.is_inline,
                     "return_type": func.return_type
                 });
+                
+                // Always include address for compatibility
+                func_obj["address"] = json!(format!("0x{:x}", func.start_address));
                 
                 if include_addresses {
                     func_obj["start_address"] = json!(format!("0x{:x}", func.start_address));
@@ -137,7 +147,7 @@ pub fn list_functions(
                     func_obj["size"] = if let Some(size) = func.size {
                         json!(size)
                     } else {
-                        json!(null)
+                        json!(0)
                     };
                 }
                 
@@ -209,19 +219,15 @@ pub fn get_line_info(
             
             Ok(json!({
                 "success": true,
-                "line_info": {
-                    "address": format!("0x{:x}", location.address),
-                    "file_path": location.file_path,
-                    "line_number": location.line_number,
-                    "column": location.column,
-                    "function_name": location.function_name,
-                    "is_valid": location.is_valid
-                },
-                "source_location": {
-                    "basename": basename,
-                    "directory": directory,
-                    "location_string": location_string
-                }
+                "address": format!("0x{:x}", location.address),
+                "file_path": location.file_path,
+                "line_number": location.line_number,
+                "column": location.column,
+                "function_name": location.function_name,
+                "is_valid": location.is_valid,
+                "basename": basename,
+                "directory": directory,
+                "location_string": location_string
             }))
         }
         Err(e) => {
@@ -243,7 +249,7 @@ pub fn get_debug_info(
     
     let include_compilation_units = arguments.get("include_compilation_units")
         .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .unwrap_or(true);
         
     let include_detailed_stats = arguments.get("include_detailed_stats")
         .and_then(|v| v.as_bool())
@@ -254,21 +260,11 @@ pub fn get_debug_info(
             debug!("Retrieved debug info: {} symbols, {} format", 
                 debug_info.symbol_count, debug_info.debug_format);
             
-            let mut result = json!({
-                "success": true,
-                "debug_info": {
-                    "has_debug_symbols": debug_info.has_debug_symbols,
-                    "debug_format": debug_info.debug_format,
-                    "symbol_count": debug_info.symbol_count,
-                    "line_table_count": debug_info.line_table_count,
-                    "function_count": debug_info.function_count,
-                    "compilation_unit_count": debug_info.compilation_units.len()
-                }
-            });
-            
-            if include_compilation_units {
-                let comp_units: Vec<Value> = debug_info.compilation_units.iter().map(|cu| {
+            // Always include compilation_units (empty array if not detailed)
+            let comp_units: Vec<Value> = if include_compilation_units {
+                debug_info.compilation_units.iter().map(|cu| {
                     json!({
+                        "file": cu.file_path,
                         "file_path": cu.file_path,
                         "producer": cu.producer,
                         "language": cu.language,
@@ -277,10 +273,21 @@ pub fn get_debug_info(
                         "line_count": cu.line_count,
                         "address_range_size": cu.high_pc - cu.low_pc
                     })
-                }).collect();
-                
-                result["debug_info"]["compilation_units"] = json!(comp_units);
-            }
+                }).collect()
+            } else {
+                vec![]
+            };
+
+            let mut result = json!({
+                "success": true,
+                "has_debug_symbols": debug_info.has_debug_symbols,
+                "debug_format": debug_info.debug_format,
+                "symbol_count": debug_info.symbol_count,
+                "line_table_count": debug_info.line_table_count,
+                "function_count": debug_info.function_count,
+                "compilation_unit_count": debug_info.compilation_units.len(),
+                "compilation_units": comp_units
+            });
             
             if include_detailed_stats {
                 let total_address_space: u64 = debug_info.compilation_units.iter()
@@ -294,7 +301,7 @@ pub fn get_debug_info(
                     .into_iter()
                     .collect();
                     
-                result["debug_info"]["detailed_stats"] = json!({
+                result["detailed_stats"] = json!({
                     "total_address_space": total_address_space,
                     "average_symbols_per_unit": if debug_info.compilation_units.len() > 0 {
                         debug_info.symbol_count / debug_info.compilation_units.len() as u32

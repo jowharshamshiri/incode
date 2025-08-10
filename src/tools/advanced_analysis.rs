@@ -59,7 +59,19 @@ impl Tool for AnalyzeCrashTool {
 
         let analysis = lldb_manager.analyze_crash(core_file_path)?;
         
+        let has_crash = analysis.crash_type != "No crash";
+        
         let mut response = json!({
+            "success": has_crash,
+            "crash_info": {
+                "signal": analysis.signal_name,
+                "signal_number": analysis.signal_number,
+                "address": analysis.crash_address.map(|addr| format!("0x{:x}", addr)),
+                "type": analysis.crash_type,
+                "thread_id": analysis.faulting_thread,
+                "exception_type": analysis.exception_type,
+                "exception_codes": analysis.exception_codes,
+            },
             "crash_type": analysis.crash_type,
             "crash_address": analysis.crash_address.map(|addr| format!("0x{:x}", addr)),
             "faulting_thread": analysis.faulting_thread,
@@ -74,12 +86,17 @@ impl Tool for AnalyzeCrashTool {
             "memory_regions": analysis.memory_regions,
             "loaded_modules": analysis.loaded_modules,
             "crash_summary": analysis.crash_summary,
+            "analysis_summary": analysis.crash_summary,
             "core_file": core_file_path,
             "analyzed_at": std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default().as_secs(),
-            "status": "analyzed"
+            "status": if has_crash { "analyzed" } else { "no_crash" }
         });
+        
+        if !has_crash {
+            response["error"] = json!("No crash to analyze - no active process or core file provided");
+        }
         
         if include_recommendations {
             response["recommendations"] = json!(analysis.recommendations);
@@ -137,7 +154,24 @@ impl Tool for GenerateCoreDumpTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
-        let result = lldb_manager.generate_core_dump(output_path)?;
+        let result = match lldb_manager.generate_core_dump(output_path) {
+            Ok(r) => r,
+            Err(IncodeError::ProcessError(_)) => {
+                // Handle no process gracefully
+                return Ok(ToolResponse::Success(json!({
+                    "success": false,
+                    "error": "No process attached",
+                    "output_path": output_path,
+                    "core_dump_path": output_path,
+                    "format": format,
+                    "include_memory": include_memory,
+                    "file_size": 0,
+                    "file_exists": false,
+                    "status": "no_process"
+                }).to_string()));
+            },
+            Err(e) => return Err(e),
+        };
         
         // Check if file was actually created
         let file_exists = std::path::Path::new(output_path).exists();
@@ -148,7 +182,9 @@ impl Tool for GenerateCoreDumpTool {
         };
         
         Ok(ToolResponse::Success(json!({
+            "success": true,
             "output_path": output_path,
+            "core_dump_path": output_path,
             "format": format,
             "include_memory": include_memory,
             "file_exists": file_exists,
@@ -156,7 +192,7 @@ impl Tool for GenerateCoreDumpTool {
             "result": result,
             "generated_at": std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default().as_secs(),
+                .unwrap_or_default().as_secs().to_string(),
             "status": if file_exists { "generated" } else { "completed" }
         }).to_string()))
     }

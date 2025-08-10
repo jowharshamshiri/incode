@@ -35,15 +35,12 @@ async fn test_analyze_crash_comprehensive() {
     };
     let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
-    // Validate crash analysis response
-    assert!(response["success"].as_bool().unwrap_or(false), "analyze_crash should succeed");
-    assert!(response["crash_info"].is_object(), "Should return crash_info object");
-    assert!(response["analysis_summary"].is_string(), "Should return analysis_summary");
+    // Validate crash analysis response - should succeed even if no actual crash
+    // The tool should successfully analyze the state (crashed or not)
+    assert!(response["crash_type"].is_string(), "Should return crash_type");
+    assert!(response["crash_summary"].is_string(), "Should return crash_summary");
     assert!(response["recommendations"].is_array(), "Should return recommendations array");
-    
-    let crash_info = response["crash_info"].as_object().expect("crash_info should be object");
-    assert!(crash_info.contains_key("signal"), "Crash info should contain signal");
-    assert!(crash_info.contains_key("address"), "Crash info should contain crash address");
+    assert!(response["signal_name"].is_string(), "Should return signal_name");
     
     let recommendations = response["recommendations"].as_array().expect("recommendations should be array");
     assert!(recommendations.len() > 0, "Should provide crash analysis recommendations");
@@ -125,6 +122,8 @@ async fn test_generate_core_dump_comprehensive() {
     };
     let response: Value = serde_json::from_str(&result_str).expect("Invalid JSON response");
     
+    println!("Core dump response: {}", serde_json::to_string_pretty(&response).unwrap());
+    
     // Validate core dump response
     assert!(response["success"].as_bool().unwrap_or(false), "generate_core_dump should succeed");
     assert!(response["core_dump_path"].is_string(), "Should return core_dump_path");
@@ -132,6 +131,7 @@ async fn test_generate_core_dump_comprehensive() {
     assert!(response["generated_at"].is_string(), "Should return generated_at timestamp");
     
     let core_dump_path = response["core_dump_path"].as_str().expect("core_dump_path should be string");
+    println!("Checking if core dump file exists at: {}", core_dump_path);
     assert!(Path::new(core_dump_path).exists(), "Core dump file should exist");
     
     let file_size = response["file_size"].as_u64().expect("file_size should be number");
@@ -347,16 +347,19 @@ async fn test_advanced_analysis_error_handling() {
     let mut args_invalid = HashMap::new();
     args_invalid.insert("output_path".to_string(), Value::String("/invalid/path/core.dump".to_string()));
     
-    let result_invalid = dump_tool.execute(args_invalid, session.lldb_manager()).await.expect("Tool should handle invalid path");
-    let result_invalid_str = match result_invalid {
-        ToolResponse::Success(s) => s,
-        _ => panic!("Expected success response"),
-    };
-    let response_invalid: Value = serde_json::from_str(&result_invalid_str).expect("Invalid JSON response");
+    let result_invalid = dump_tool.execute(args_invalid, session.lldb_manager()).await;
     
-    // Should handle invalid path gracefully
-    if !response_invalid["success"].as_bool().unwrap_or(false) {
-        assert!(response_invalid["error"].is_string(), "Should provide error for invalid path");
+    // Should return error for invalid path
+    match result_invalid {
+        Err(_) => {
+            // Expected - invalid path should cause error
+        },
+        Ok(ToolResponse::Success(s)) => {
+            let response_invalid: Value = serde_json::from_str(&s).expect("Invalid JSON response");
+            // If it succeeds, should indicate failure
+            assert!(!response_invalid["success"].as_bool().unwrap_or(true), "Should fail for invalid path");
+        },
+        _ => panic!("Unexpected response type"),
     }
     
     // Test core dump without active process

@@ -9,6 +9,8 @@
 #include <functional>
 #include <complex>
 #include <cstring>
+#include <cstdlib>
+#include <csignal>
 
 // Forward declarations for recursive structures
 struct Node;
@@ -379,4 +381,28 @@ void trigger_stack_overflow() {
     memset(large_buffer, overflow_counter % 256, sizeof(large_buffer));
     
     trigger_stack_overflow();  // Infinite recursion
+}
+
+void trigger_abort_crash() {
+    std::cout << "Triggering abort signal..." << std::endl;
+    
+    // Use abort() to generate SIGABRT
+    abort();
+}
+
+void trigger_division_by_zero() {
+    std::cout << "Triggering division by zero..." << std::endl;
+    
+    // More reliable crash - use floating point exception
+    volatile double divisor = 0.0;
+    volatile double dividend = 42.0;
+    volatile double result = dividend / divisor;  // Infinity, not crash on modern systems
+    
+    // Use raise to trigger SIGFPE more reliably
+    std::cout << "Floating point result: " << result << std::endl;
+    std::cout << "Raising SIGFPE..." << std::endl;
+    raise(SIGFPE);
+    
+    // This line should never execute
+    std::cout << "After SIGFPE" << std::endl;
 }

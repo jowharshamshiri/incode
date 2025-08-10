@@ -29,6 +29,11 @@ impl Tool for GetTargetInfoTool {
                 "type": "boolean", 
                 "description": "Include file size, timestamps, and other file details",
                 "default": true
+            },
+            "analyze_symbols": {
+                "type": "boolean",
+                "description": "Perform symbol analysis and include detailed symbol information",
+                "default": false
             }
         })
     }
@@ -38,8 +43,23 @@ impl Tool for GetTargetInfoTool {
         arguments: HashMap<String, Value>,
         lldb_manager: &mut LldbManager,
     ) -> IncodeResult<ToolResponse> {
-        let result = target_information::get_target_info(lldb_manager, arguments).await?;
-        Ok(ToolResponse::Json(result))
+        match target_information::get_target_info(lldb_manager, arguments).await {
+            Ok(result) => {
+                let mut response = json!({
+                    "success": true
+                });
+                if let Value::Object(obj) = result {
+                    for (key, value) in obj {
+                        response[key] = value;
+                    }
+                }
+                Ok(ToolResponse::Success(response.to_string()))
+            },
+            Err(e) => Ok(ToolResponse::Success(json!({
+                "success": false,
+                "error": format!("Failed to get target info: {}", e)
+            }).to_string()))
+        }
     }
 }
 
@@ -75,8 +95,23 @@ impl Tool for GetPlatformInfoTool {
         arguments: HashMap<String, Value>,
         lldb_manager: &mut LldbManager,
     ) -> IncodeResult<ToolResponse> {
-        let result = target_information::get_platform_info(lldb_manager, arguments).await?;
-        Ok(ToolResponse::Json(result))
+        match target_information::get_platform_info(lldb_manager, arguments).await {
+            Ok(result) => {
+                let mut response = json!({
+                    "success": true
+                });
+                if let Value::Object(obj) = result {
+                    for (key, value) in obj {
+                        response[key] = value;
+                    }
+                }
+                Ok(ToolResponse::Success(response.to_string()))
+            },
+            Err(e) => Ok(ToolResponse::Success(json!({
+                "success": false,
+                "error": format!("Failed to get platform info: {}", e)
+            }).to_string()))
+        }
     }
 }
 
@@ -97,6 +132,14 @@ impl Tool for ListModulesTool {
             "filter_name": {
                 "type": "string",
                 "description": "Filter modules by name (substring match)"
+            },
+            "name_pattern": {
+                "type": "string",
+                "description": "Filter modules by name pattern (alias for filter_name)"
+            },
+            "limit": {
+                "type": "number",
+                "description": "Maximum number of modules to return"
             },
             "include_debug_info": {
                 "type": "boolean",
@@ -121,8 +164,23 @@ impl Tool for ListModulesTool {
         arguments: HashMap<String, Value>,
         lldb_manager: &mut LldbManager,
     ) -> IncodeResult<ToolResponse> {
-        let result = target_information::list_modules(lldb_manager, arguments).await?;
-        Ok(ToolResponse::Json(result))
+        match target_information::list_modules(lldb_manager, arguments).await {
+            Ok(result) => {
+                let mut response = json!({
+                    "success": true
+                });
+                if let Value::Object(obj) = result {
+                    for (key, value) in obj {
+                        response[key] = value;
+                    }
+                }
+                Ok(ToolResponse::Success(response.to_string()))
+            },
+            Err(e) => Ok(ToolResponse::Success(json!({
+                "success": false,
+                "error": format!("Failed to list modules: {}", e)
+            }).to_string()))
+        }
     }
 }
 

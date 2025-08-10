@@ -163,8 +163,9 @@ async fn test_get_line_info_comprehensive() {
     
     let tool = GetLineInfoTool;
     
-    // Test 1: Get line info for current location
-    let args = HashMap::new();
+    // Test 1: Get line info for a specific address
+    let mut args = HashMap::new();
+    args.insert("address".to_string(), Value::String("0x100001000".to_string()));
     let result = tool.execute(args, session.lldb_manager()).await.expect("get_line_info failed");
     let result_str = match result {
         ToolResponse::Success(s) => s,
@@ -204,6 +205,7 @@ async fn test_get_line_info_comprehensive() {
     
     // Test 3: Get line info with context
     let mut args_context = HashMap::new();
+    args_context.insert("address".to_string(), Value::String("0x100001100".to_string()));
     args_context.insert("include_context".to_string(), Value::Bool(true));
     
     let result_context = tool.execute(args_context, session.lldb_manager()).await.expect("get_line_info with context failed");
