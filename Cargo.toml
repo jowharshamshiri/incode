@@ -5,38 +5,34 @@ edition = "2021"
 description = "InCode - Comprehensive MCP server for LLDB debugging automation"
 authors = ["InCode Project"]
 license = "MIT"
-repository = "https://github.com/user/incode"
+repository = "https://github.com/jowharshamshiri/incode"
+homepage = "https://github.com/jowharshamshiri/incode"
+documentation = "https://docs.rs/incode"
+readme = "README.md"
 keywords = ["lldb", "debugging", "mcp", "automation", "ai"]
 categories = ["development-tools", "debugging"]
 
 [dependencies]
 # LLDB integration
 lldb-sys = "0.0.31"
-
 # MCP Protocol
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
 tokio-util = { version = "0.7", features = ["codec"] }
-
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"
-
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
 # CLI
 clap = { version = "4.0", features = ["derive"] }
-
 # Async utilities
 futures = "0.3"
 async-trait = "0.1"
-
 # UUID for session management
 uuid = { version = "1.0", features = ["v4", "serde"] }
-
 # Cross-platform process management
 libc = "0.2"
 
@@ -61,6 +57,10 @@ mock = []
 name = "incode"
 path = "src/lib.rs"
 
+[[bin]]
+name = "incode"
+path = "src/main.rs"
+
 [profile.release]
 opt-level = 3
 lto = true
@@ -71,7 +71,3 @@ panic = "abort"
 opt-level = 0
 debug = true
 split-debuginfo = "unpacked"
-
-[[bin]]
-name = "incode"
-path = "src/main.rs"
