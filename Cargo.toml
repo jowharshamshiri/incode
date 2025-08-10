@@ -10,7 +10,7 @@ homepage = "https://github.com/jowharshamshiri/incode"
 documentation = "https://docs.rs/incode"
 readme = "README.md"
 keywords = ["lldb", "debugging", "mcp", "automation", "ai"]
-categories = ["development-tools", "debugging", "mcp", "lldb"]
+categories = ["development-tools"]
 
 [dependencies]
 # LLDB integration
