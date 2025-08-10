@@ -4,6 +4,11 @@
 **Type**: MCP Server for LLDB Debugging  
 **Scope**: 65 debugging tools across 13 categories
 
+[![Crates.io](https://img.shields.io/crates/v/incode.svg)](https://crates.io/crates/incode)
+[![Downloads](https://img.shields.io/crates/d/incode.svg)](https://crates.io/crates/incode)
+[![Docs.rs](https://docs.rs/incode/badge.svg)](https://docs.rs/incode)
+
+
 ## Overview
 
 InCode is a Model Context Protocol (MCP) server that provides AI agents with LLDB debugging capabilities. Following the pattern established by [insite](https://github.com/jowharshamshiri/insite) for browser automation (52 tools across 13 categories), InCode provides similar coverage for LLDB debugging automation.
