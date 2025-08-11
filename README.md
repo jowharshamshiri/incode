@@ -1,6 +1,5 @@
 # InCode - LLDB Debugging Automation
 
-**Version**: 0.1.0  
 **Type**: MCP Server for LLDB Debugging  
 **Scope**: 65 debugging tools across 13 categories
 
