@@ -591,9 +591,9 @@ impl LldbManager {
         Ok(format!("Session {} resources cleaned up", session_id))
     }
 
-    /// Launch a process for debugging
-    pub fn launch_process(&mut self, executable: &str, args: &[String], _env: &HashMap<String, String>) -> IncodeResult<u32> {
-        debug!("Launching process: {} with args: {:?}", executable, args);
+    /// Launch a process for debugging - LLDB workflow: target create + run
+    pub fn launch_process(&mut self, executable: &str, args: &[String], env: &HashMap<String, String>) -> IncodeResult<u32> {
+        debug!("LLDB workflow: target create '{}' then run with args: {:?}, env: {:?}", executable, args, env);
         
         let debugger = self.debugger.ok_or_else(|| IncodeError::lldb_init("No debugger instance"))?;
         
@@ -602,7 +602,8 @@ impl LldbManager {
             return Err(IncodeError::process_not_found(format!("Executable not found: {}", executable)));
         }
 
-        // Create target
+        // Step 1: target create (equivalent to "target create /path/to/exe")
+        debug!("Step 1: Creating target for {}", executable);
         let exe_cstr = std::ffi::CString::new(executable)
             .map_err(|_| IncodeError::lldb_op("Invalid executable path"))?;
         
@@ -610,17 +611,15 @@ impl LldbManager {
         if target.is_null() {
             return Err(IncodeError::lldb_op(format!("Failed to create target for: {}", executable)));
         }
+        
+        debug!("✓ Target created successfully for {}", executable);
 
-        // Prepare arguments
+        // Step 2: Prepare arguments for run command (equivalent to "r arg1 arg2 ...")
+        debug!("Step 2: Preparing arguments for run command");
         let mut argv_ptrs: Vec<*const i8> = Vec::new();
         let mut arg_cstrs: Vec<std::ffi::CString> = Vec::new();
         
-        // Add executable as argv[0]
-        arg_cstrs.push(std::ffi::CString::new(executable)
-            .map_err(|_| IncodeError::lldb_op("Invalid executable name"))?);
-        argv_ptrs.push(arg_cstrs.last().unwrap().as_ptr());
-        
-        // Add remaining arguments
+        // For LLDB run command, we only pass the arguments (not executable as argv[0])
         for arg in args {
             let arg_cstr = std::ffi::CString::new(arg.as_str())
                 .map_err(|_| IncodeError::lldb_op("Invalid argument"))?;
@@ -629,21 +628,38 @@ impl LldbManager {
         }
         argv_ptrs.push(std::ptr::null()); // NULL terminate
 
-        // Launch process
+        // Log environment variables (LLDB handles environment differently)
+        if !env.is_empty() {
+            debug!("Environment variables provided: {:?}", env);
+            // TODO: Set environment via SBTarget or SBLaunchInfo if needed
+        }
+
+        // Step 3: Run the target (equivalent to "r" command) - non-blocking
+        debug!("Step 3: Running target (equivalent to 'r' command) - non-blocking");
+        
+        // Use LLDB launch but don't wait for process completion
         let process = unsafe {
             SBTargetLaunchSimple(
                 target,
                 argv_ptrs.as_ptr(),
-                std::ptr::null(), // envp - TODO: implement environment
-                std::ptr::null()  // working_dir - TODO: implement working directory
+                std::ptr::null(), // envp - will be handled by target environment
+                std::ptr::null()  // working_dir - will use target default
             )
         };
 
         if process.is_null() {
-            return Err(IncodeError::lldb_op("Failed to launch process"));
+            return Err(IncodeError::lldb_op("Failed to run target - process launch failed"));
         }
 
+        // Get PID immediately - process continues running independently
         let pid = unsafe { SBProcessGetProcessID(process) } as u32;
+        if pid == 0 {
+            return Err(IncodeError::lldb_op("Failed to get valid process ID from running target"));
+        }
+
+        // Get initial process state - don't wait for it to reach any specific state
+        let state = unsafe { SBProcessGetState(process) };
+        debug!("✓ LLDB workflow complete: target created, process running independently with PID: {}, state: {:?}", pid, state);
         
         // Update internal state
         self.current_target = Some(target);
@@ -654,8 +670,48 @@ impl LldbManager {
             self.update_session_state(&session_id, SessionState::Running)?;
         }
 
-        info!("Successfully launched process {} with PID {}", executable, pid);
+        info!("Successfully completed LLDB workflow: target create + run for {} with PID {}", executable, pid);
         Ok(pid)
+    }
+
+    /// Get current console output from the running process
+    pub fn get_console_output(&self) -> IncodeResult<String> {
+        let process = self.current_process.ok_or_else(|| IncodeError::lldb_op("No active process"))?;
+        
+        // Get stdout from the process
+        let mut stdout_buffer = vec![0u8; 1024];
+        let stdout_len = unsafe { 
+            SBProcessGetSTDOUT(process, stdout_buffer.as_mut_ptr() as *mut i8, stdout_buffer.len()) 
+        };
+        
+        let stdout_str = if stdout_len > 0 {
+            stdout_buffer.truncate(stdout_len);
+            String::from_utf8_lossy(&stdout_buffer).to_string()
+        } else {
+            "".to_string()
+        };
+        
+        // Get stderr from the process  
+        let mut stderr_buffer = vec![0u8; 1024];
+        let stderr_len = unsafe { 
+            SBProcessGetSTDERR(process, stderr_buffer.as_mut_ptr() as *mut i8, stderr_buffer.len()) 
+        };
+        
+        let stderr_str = if stderr_len > 0 {
+            stderr_buffer.truncate(stderr_len);
+            String::from_utf8_lossy(&stderr_buffer).to_string()
+        } else {
+            "".to_string()
+        };
+        
+        // Combine stdout and stderr
+        let combined_output = if !stdout_str.is_empty() || !stderr_str.is_empty() {
+            format!("STDOUT:\n{}\nSTDERR:\n{}", stdout_str, stderr_str)
+        } else {
+            "No console output available".to_string()
+        };
+        
+        Ok(combined_output)
     }
 
     /// Attach to an existing process

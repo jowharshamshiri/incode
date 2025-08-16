@@ -114,6 +114,7 @@ impl ToolRegistry {
     // Tool registration methods for each category
     fn register_process_control_tools(&mut self) {
         self.register_tool(Box::new(process_control::LaunchProcessTool));
+        self.register_tool(Box::new(process_control::GetConsoleOutputTool));
         self.register_tool(Box::new(process_control::AttachToProcessTool));
         self.register_tool(Box::new(process_control::DetachProcessTool));
         self.register_tool(Box::new(process_control::KillProcessTool));

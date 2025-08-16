@@ -62,12 +62,78 @@ impl Tool for LaunchProcessTool {
             }).collect())
             .unwrap_or_default();
 
-        match lldb_manager.launch_process(executable, &args, &env) {
-            Ok(pid) => Ok(ToolResponse::Json(json!({
+        let working_dir = arguments.get("working_dir")
+            .and_then(|v| v.as_str());
+
+        // Handle working directory by changing current directory if specified
+        let original_dir = if let Some(wd) = working_dir {
+            let current = std::env::current_dir().ok();
+            if let Err(e) = std::env::set_current_dir(wd) {
+                return Ok(ToolResponse::Error(format!("Failed to change to working directory {}: {}", wd, e)));
+            }
+            current
+        } else {
+            None
+        };
+
+        // Launch the process
+        let result = lldb_manager.launch_process(executable, &args, &env);
+
+        // Restore original directory if we changed it
+        if let Some(orig_dir) = original_dir {
+            if let Err(e) = std::env::set_current_dir(&orig_dir) {
+                eprintln!("Warning: Failed to restore original directory: {}", e);
+            }
+        }
+
+        match result {
+            Ok(pid) => {
+                // Get initial console output from the launched process
+                let console_output = lldb_manager.get_console_output()
+                    .unwrap_or_else(|_| "No console output available yet".to_string());
+                
+                Ok(ToolResponse::Json(json!({
+                    "success": true,
+                    "pid": pid,
+                    "executable": executable,
+                    "working_dir": working_dir,
+                    "message": format!("Successfully launched process {} with PID {} - process running independently", executable, pid),
+                    "console_output": console_output,
+                    "note": "Process is running independently. Use get_console_output to read more output."
+                })))
+            },
+            Err(e) => Ok(ToolResponse::Error(e.to_string())),
+        }
+    }
+}
+
+// Console output tool for reading from running process
+pub struct GetConsoleOutputTool;
+
+#[async_trait]
+impl Tool for GetConsoleOutputTool {
+    fn name(&self) -> &'static str {
+        "get_console_output"
+    }
+
+    fn description(&self) -> &'static str {
+        "Get current console output (stdout/stderr) from the running debugged process"
+    }
+
+    fn parameters(&self) -> Value {
+        json!({})
+    }
+
+    async fn execute(
+        &self,
+        _arguments: HashMap<String, Value>,
+        lldb_manager: &mut LldbManager,
+    ) -> IncodeResult<ToolResponse> {
+        match lldb_manager.get_console_output() {
+            Ok(output) => Ok(ToolResponse::Json(json!({
                 "success": true,
-                "pid": pid,
-                "executable": executable,
-                "message": format!("Successfully launched process {} with PID {}", executable, pid)
+                "console_output": output,
+                "message": "Retrieved console output from running process"
             }))),
             Err(e) => Ok(ToolResponse::Error(e.to_string())),
         }

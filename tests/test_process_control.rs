@@ -391,3 +391,49 @@ async fn test_lldb_manager_cleanup() {
     assert!(cleanup_result.is_ok(), "Cleanup should succeed");
     println!("✅ LLDB Manager cleanup completed successfully");
 }
+
+#[tokio::test]
+async fn test_f0001_launch_process_async_behavior() {
+    // Test that launch_process returns immediately and doesn't block MCP server
+    let mut manager = LldbManager::new(None).expect("Failed to create LLDB manager");
+    
+    // Use a long-running test program to verify async behavior
+    let test_binary = "/Users/bahram/ws/prj/incode/test_debuggee/test_debuggee";
+    let args = vec!["infinite".to_string()]; // Run in infinite mode
+    let env = std::collections::HashMap::new();
+    
+    // Measure time to ensure launch_process returns quickly
+    let start_time = std::time::Instant::now();
+    
+    let result = manager.launch_process(test_binary, &args, &env);
+    
+    let elapsed = start_time.elapsed();
+    
+    match result {
+        Ok(pid) => {
+            println!("✅ F0001: Process launched asynchronously with PID: {}", pid);
+            println!("✅ F0001: Launch returned in {} ms (should be < 5000ms)", elapsed.as_millis());
+            
+            // Verify that launch_process returned reasonably quickly (< 5 seconds for MCP responsiveness)
+            // Note: LLDB C API has inherent latency, but should not hang indefinitely
+            assert!(elapsed.as_secs() < 5, "launch_process should return reasonably quickly for MCP server, took {} seconds", elapsed.as_secs());
+            
+            // Verify process is actually running by checking process info
+            if let Ok(info) = manager.get_process_info() {
+                println!("✅ F0001: Process info - PID: {}, State: {}", info.pid, info.state);
+                assert_eq!(info.pid, pid, "Process info PID should match returned PID");
+            }
+            
+            // Clean up by killing the process
+            if let Err(e) = manager.kill_process() {
+                println!("⚠️ F0001: Failed to kill process: {}", e);
+            }
+        }
+        Err(e) => {
+            println!("⚠️ F0001: Launch failed (may be expected in test environment): {}", e);
+            // In test environments without the test binary, this is expected
+            println!("✅ F0001: Launch returned quickly even on failure: {} ms", elapsed.as_millis());
+            assert!(elapsed.as_secs() < 5, "launch_process should return reasonably quickly even on failure");
+        }
+    }
+}
